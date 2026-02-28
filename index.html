@@ -56,53 +56,10 @@
     </div>
 
     <script>
-        // URL AGGIORNATO
-        const SYNC_URL = "https://script.google.com/macros/s/AKfycbxVQJGqlNJR71Niai-8AHWzdn073cQwmmUw7uHZpWFsMJACJTusDH9b6fT22fXD2JI6/exec";
-        
         let db = JSON.parse(localStorage.getItem('carTrackerDB_v4')) || { activeId: null, vehicles: [] };
         let editingId = null;
 
-        function save() { 
-            localStorage.setItem('carTrackerDB_v4', JSON.stringify(db));
-            syncToCloud(true);
-        }
-
-        async function syncToCloud(silent = false) {
-            try {
-                await fetch(SYNC_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify(db)
-                });
-                if(!silent) alert("✅ Dati sincronizzati su Google Drive!");
-            } catch (e) {
-                if(!silent) alert("❌ Errore sincronizzazione: " + e);
-            }
-        }
-
-        async function loadFromCloud() {
-            if(!confirm("Vuoi sovrascrivere i dati locali con il backup su Drive?")) return;
-            try {
-                // Fetch con gestione dei redirect di Google Apps Script
-                const response = await fetch(SYNC_URL);
-                if (!response.ok) throw new Error("Risposta server non valida");
-                
-                const cloudData = await response.json();
-                
-                if(cloudData && cloudData.vehicles) {
-                    db = cloudData;
-                    localStorage.setItem('carTrackerDB_v4', JSON.stringify(db));
-                    alert("✅ Dati recuperati correttamente!");
-                    location.reload();
-                } else {
-                    alert("⚠️ Backup vuoto o non trovato su Drive.");
-                }
-            } catch (e) {
-                console.error(e);
-                alert("❌ Errore durante il recupero. Assicurati che il file esista su Drive (fai prima un 'Salva Cloud').");
-            }
-        }
-
+        function save() { localStorage.setItem('carTrackerDB_v4', JSON.stringify(db)); }
         function toggleMenu() { document.getElementById('vMenu').classList.toggle('show'); }
 
         const iconMap = {
@@ -186,12 +143,52 @@
 
             if (tab === 'km') {
                 const logs = [...v.kmLogs].sort((a,b) => new Date(b.d) - new Date(a.d));
-                cont.innerHTML = `<div class="card p-5 space-y-4"><h3 class="font-bold text-xs text-orange-500 uppercase">Nuova Lettura</h3><div class="flex gap-2"><input type="date" id="kDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="kVal" placeholder="Km totali" class="input-dark flex-1"></div><input type="text" id="kDesc" placeholder="Descrizione (opzionale)" class="input-dark"><button onclick="addKm()" class="btn-orange text-sm">Registra</button></div><div class="card p-5"><h3 class="text-[10px] font-bold uppercase text-gray-500 mb-4 tracking-widest">Storico</h3><div class="divide-y divide-gray-800">${logs.map((l, i) => `<div class="flex justify-between items-start py-3"><div><p class="text-white font-bold">${parseInt(l.v).toLocaleString()} km</p><p class="text-[10px] text-gray-500">${l.d.split('-').reverse().join('/')}</p>${l.desc ? `<p class="text-[10px] text-orange-500/80 mt-1 italic">${l.desc}</p>` : ''}</div><button onclick="delKm(${i})" class="text-gray-700 pt-1"><i class="bi bi-trash"></i></button></div>`).join('') || '<p class="text-gray-600 text-xs italic">Nessun dato.</p>'}</div></div>`;
+                cont.innerHTML = `
+                    <div class="card p-5 space-y-4">
+                        <h3 class="font-bold text-xs text-orange-500 uppercase">Nuova Lettura</h3>
+                        <div class="flex gap-2">
+                            <input type="date" id="kDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}">
+                            <input type="number" id="kVal" placeholder="Km totali" class="input-dark flex-1">
+                        </div>
+                        <input type="text" id="kDesc" placeholder="Descrizione (es. Viaggio)" class="input-dark">
+                        <button onclick="addKm()" class="btn-orange text-sm">Registra</button>
+                    </div>
+                    <div class="card p-5">
+                        <h3 class="text-[10px] font-bold uppercase text-gray-500 mb-4 tracking-widest">Storico</h3>
+                        <div class="divide-y divide-gray-800">
+                            ${logs.map((l, i) => `
+                                <div class="flex justify-between items-start py-3">
+                                    <div>
+                                        <p class="text-white font-bold">${parseInt(l.v).toLocaleString()} km</p>
+                                        <p class="text-[10px] text-gray-500">${l.d.split('-').reverse().join('/')}</p>
+                                        ${l.desc ? `<p class="text-[10px] text-orange-500/80 mt-1 italic">${l.desc}</p>` : ''}
+                                    </div>
+                                    <button onclick="delKm(${i})" class="text-gray-700 pt-1"><i class="bi bi-trash"></i></button>
+                                </div>`).join('') || '<p class="text-gray-600 text-xs italic">Nessun dato.</p>'}
+                        </div>
+                    </div>`;
             }
 
             if (tab === 'maint') {
                 const logs = [...v.maint].sort((a,b) => new Date(b.d_raw) - new Date(a.d_raw));
-                cont.innerHTML = `<div class="card p-5 space-y-4 mb-4"><h3 class="font-bold text-xs text-orange-500 uppercase">Nuovo Intervento</h3><select id="mType" class="input-dark"><option>Tagliando</option><option>Revisione</option><option>Cambio Gomme</option><option>Inversione Gomme</option><option>Ricambi</option><option>Altro</option></select><div class="flex gap-2"><input type="date" id="mDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="mKm" placeholder="Km" class="input-dark flex-1"></div><textarea id="mDesc" placeholder="Descrizione lavori (opzionale)" class="input-dark h-20"></textarea><button onclick="addM()" class="btn-orange text-sm">Salva Intervento</button></div><div class="card p-5"><h3 class="text-[10px] font-bold uppercase text-gray-500 mb-4 tracking-widest">Officina</h3><div class="space-y-3">${logs.map((m, i) => `<div class="bg-[#16161c] p-3 rounded-xl border border-gray-800"><div class="flex justify-between items-start"><div class="flex items-center gap-3"><div class="bg-orange-500/10 p-2.5 rounded-lg border border-orange-500/20"><i class="bi ${iconMap[m.t] || 'bi-tools'} text-orange-500"></i></div><div><p class="text-orange-500 font-bold text-sm leading-tight">${m.t}</p><p class="text-[10px] text-white mt-0.5">${m.k.toLocaleString()} km • ${m.d}</p></div></div><button onclick="delM(${i})" class="text-gray-700 p-1"><i class="bi bi-trash"></i></button></div>${m.desc ? `<p class="mt-2 text-[11px] text-gray-400 border-t border-gray-800 pt-2">${m.desc}</p>` : ''}</div>`).join('') || '<p class="text-gray-600 text-xs italic text-center py-4">Nessun intervento registrato.</p>'}</div></div>`;
+                cont.innerHTML = `<div class="card p-5 space-y-4 mb-4"><h3 class="font-bold text-xs text-orange-500 uppercase">Nuovo Intervento</h3>
+                    <select id="mType" class="input-dark"><option>Tagliando</option><option>Revisione</option><option>Cambio Gomme</option><option>Inversione Gomme</option><option>Ricambi</option><option>Altro</option></select>
+                    <div class="flex gap-2"><input type="date" id="mDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="mKm" placeholder="Km" class="input-dark flex-1"></div>
+                    <textarea id="mDesc" placeholder="Descrizione lavori (opzionale)" class="input-dark h-20"></textarea>
+                    <button onclick="addM()" class="btn-orange text-sm">Salva Intervento</button></div>
+                    <div class="card p-5"><h3 class="text-[10px] font-bold uppercase text-gray-500 mb-4 tracking-widest">Officina</h3><div class="space-y-3">${logs.map((m, i) => `
+                    <div class="bg-[#16161c] p-3 rounded-xl border border-gray-800">
+                        <div class="flex justify-between items-start">
+                            <div class="flex items-center gap-3">
+                                <div class="bg-orange-500/10 p-2.5 rounded-lg border border-orange-500/20">
+                                    <i class="bi ${iconMap[m.t] || 'bi-tools'} text-orange-500"></i>
+                                </div>
+                                <div><p class="text-orange-500 font-bold text-sm leading-tight">${m.t}</p><p class="text-[10px] text-white mt-0.5">${m.k.toLocaleString()} km • ${m.d}</p></div>
+                            </div>
+                            <button onclick="delM(${i})" class="text-gray-700 p-1"><i class="bi bi-trash"></i></button>
+                        </div>
+                        ${m.desc ? `<p class="mt-2 text-[11px] text-gray-400 border-t border-gray-800 pt-2">${m.desc}</p>` : ''}
+                    </div>`).join('') || '<p class="text-gray-600 text-xs italic text-center py-4">Nessun intervento registrato.</p>'}</div></div>`;
             }
 
             if (tab === 'settings') {
@@ -206,18 +203,13 @@
                     </div>
 
                     <div class="card p-5 space-y-4">
-                        <h3 class="font-bold text-blue-500 uppercase text-xs tracking-widest">Google Cloud Sync</h3>
+                        <h3 class="font-bold text-gray-500 uppercase text-xs tracking-widest">Dati & Backup</h3>
                         <div class="flex gap-2">
-                            <button onclick="syncToCloud()" class="flex-1 bg-blue-900/20 border border-blue-800 text-blue-400 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-cloud-upload mr-2"></i>Salva Cloud</button>
-                            <button onclick="loadFromCloud()" class="flex-1 bg-gray-800 border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-cloud-download mr-2"></i>Recupera</button>
-                        </div>
-                    </div>
-
-                    <div class="card p-5 space-y-4">
-                        <h3 class="font-bold text-gray-500 uppercase text-xs tracking-widest">Backup Manuale</h3>
-                        <div class="flex gap-2">
-                            <button onclick="exportData()" class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-download mr-2"></i>Esporta File</button>
-                            <label class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase text-center cursor-pointer"><i class="bi bi-upload mr-2"></i>Importa<input type="file" class="hidden" onchange="importData(event)"></label>
+                            <button onclick="exportData()" class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-download mr-2"></i>Esporta</button>
+                            <label class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase text-center cursor-pointer">
+                                <i class="bi bi-upload mr-2"></i>Importa
+                                <input type="file" class="hidden" onchange="importData(event)">
+                            </label>
                         </div>
                     </div>
 
@@ -246,7 +238,23 @@
                     layout: { padding: { left: -5, right: 0 } }, 
                     scales: { 
                         y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 10 } } }, 
-                        x: { type: 'linear', min: minX, max: maxX, bounds: 'ticks', grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 }, autoSkip: true, maxTicksLimit: 5, minTicksLimit: 5, maxRotation: 0, minRotation: 0, callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) } } 
+                        x: { 
+                            type: 'linear', 
+                            min: minX, 
+                            max: maxX, 
+                            bounds: 'ticks', 
+                            grid: { display: false }, 
+                            ticks: { 
+                                color: '#6b7280', 
+                                font: { size: 9 }, 
+                                autoSkip: true, 
+                                maxTicksLimit: 5, 
+                                minTicksLimit: 5,
+                                maxRotation: 0,
+                                minRotation: 0,
+                                callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) 
+                            } 
+                        } 
                     } 
                 } 
             });
@@ -281,7 +289,16 @@
         function editVehicle(id) { const v = db.vehicles.find(x => x.id === id); editingId = id; render('settings'); document.getElementById('formTitle').innerText = "Modifica Veicolo"; document.getElementById('vTipo').value = v.tipo; document.getElementById('vMarca').value = v.marca; document.getElementById('vMod').value = v.modello; document.getElementById('vTargaInput').value = v.targa; document.getElementById('vAnnoInput').value = v.anno; document.getElementById('btnSaveV').innerText = "Aggiorna Dati"; document.getElementById('btnCancelEdit').classList.remove('hidden'); }
         function deleteVehicle(id) { if(confirm("Eliminare?")) { db.vehicles = db.vehicles.filter(x => x.id !== id); if(db.activeId === id) db.activeId = db.vehicles.length ? db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
         function updateHeader() { const v = db.vehicles.find(x => x.id === db.activeId); if(v) { document.getElementById('vName').innerText = `${v.marca} ${v.modello}`; document.getElementById('vTarga').innerText = v.targa || '------'; document.getElementById('vAnno').innerText = v.anno || '----'; document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl'; } document.getElementById('vMenu').innerHTML = db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join(''); }
-        function addKm() { const v = db.vehicles.find(x => x.id === db.activeId); const val = document.getElementById('kVal').value; const date = document.getElementById('kDate').value; const desc = document.getElementById('kDesc').value; if(!val || !v) return; v.kmLogs.push({ d: date, v: parseInt(val), desc: desc }); save(); switchTab('dashboard'); }
+        function addKm() { 
+            const v = db.vehicles.find(x => x.id === db.activeId); 
+            const val = document.getElementById('kVal').value; 
+            const date = document.getElementById('kDate').value; 
+            const desc = document.getElementById('kDesc').value;
+            if(!val || !v) return; 
+            v.kmLogs.push({ d: date, v: parseInt(val), desc: desc }); 
+            save(); 
+            switchTab('dashboard'); 
+        }
         function addM() { const v = db.vehicles.find(x => x.id === db.activeId); const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; if(!k || !v) return; v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); save(); switchTab('dashboard'); }
         function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value, date = document.getElementById('deadDate').value, km = document.getElementById('deadKm').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date, km: km ? parseInt(km) : null }); save(); render('dashboard'); }
         function delKm(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
