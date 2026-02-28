@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Car & Moto Tracker Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <style>
+        body { background-color: #0f0f13; color: #e5e7eb; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+        .card { background-color: #1e1e24; border-radius: 1.25rem; border: 1px solid #2a2a32; }
+        .input-dark { background-color: #16161c; border: 1px solid #2a2a32; color: white; border-radius: 0.75rem; padding: 0.8rem; width: 100%; outline: none; font-size: 0.9rem; }
+        .input-dark:focus { border-color: #f97316; }
+        .btn-orange { background-color: #f97316; color: black; font-weight: 800; border-radius: 0.75rem; padding: 1rem; width: 100%; cursor: pointer; text-transform: uppercase; }
+        .nav-top-item { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; font-size: 0.65rem; font-weight: 700; color: #6b7280; flex: 1; padding: 0.8rem 0; border-bottom: 2px solid transparent; }
+        .nav-top-item.active { color: #f97316; border-bottom: 2px solid #f97316; background: linear-gradient(to bottom, transparent, rgba(249, 115, 22, 0.05)); }
+        .vehicle-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #16161c; border: 1px solid #2a2a32; display: none; z-index: 100; border-radius: 0 0 1rem 1rem; }
+        .vehicle-dropdown.show { display: block; }
+        .v-opt { padding: 1rem; border-bottom: 1px solid #2a2a32; color: #9ca3af; cursor: pointer; }
+        .badge-deadline { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 0.5rem; font-weight: bold; }
+    </style>
+</head>
+<body class="pb-10">
+
+    <div id="app" class="max-w-md mx-auto">
+        <header class="bg-[#0f0f13] border-b border-gray-800/50 sticky top-0 z-50">
+            <div class="p-4 flex items-center justify-between cursor-pointer" onclick="toggleMenu()">
+                <div class="flex items-center gap-3">
+                    <div class="bg-[#1e1e24] p-2.5 rounded-xl border border-gray-800 shadow-lg">
+                        <i id="headerIcon" class="bi bi-car-front-fill text-orange-500 text-xl"></i>
+                    </div>
+                    <div class="flex flex-col">
+                        <span id="vName" class="text-lg font-black text-white uppercase leading-none tracking-tight">Nessun Mezzo</span>
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <span id="vTarga" class="text-[10px] text-gray-400 font-mono font-bold">------</span>
+                            <span class="text-gray-600 text-[10px]">•</span>
+                            <span id="vAnno" class="text-[10px] text-gray-400 font-bold">----</span>
+                        </div>
+                    </div>
+                    <i class="bi bi-chevron-down text-orange-500 text-xs ml-auto"></i>
+                </div>
+            </div>
+            <div id="vMenu" class="vehicle-dropdown shadow-2xl"></div>
+
+            <nav class="flex justify-around border-t border-gray-800/30">
+                <button onclick="switchTab('dashboard')" class="nav-top-item active" id="t-dashboard"><i class="bi bi-grid-1x2-fill text-lg"></i>Dashboard</button>
+                <button onclick="switchTab('km')" class="nav-top-item" id="t-km"><i class="bi bi-speedometer2 text-lg"></i>Km</button>
+                <button onclick="switchTab('maint')" class="nav-top-item" id="t-maint"><i class="bi bi-tools text-lg"></i>Officina</button>
+                <button onclick="switchTab('settings')" class="nav-top-item" id="t-settings"><i class="bi bi-plus-circle text-lg"></i>Mezzi</button>
+            </nav>
+        </header>
+
+        <div id="content" class="p-4 space-y-4 pb-20"></div>
+    </div>
+
+    <script>
+        const SYNC_URL = "https://script.google.com/macros/s/AKfycbzHowtt_djogPul6svMgEaBBZ_xCJvScZeiOF8vjLqMIAJ17M7w5jDPEiCv96--OK96/exec";
+        let db = JSON.parse(localStorage.getItem('carTrackerDB_v4')) || { activeId: null, vehicles: [] };
+        let editingId = null;
+
+        function save() { 
+            localStorage.setItem('carTrackerDB_v4', JSON.stringify(db));
+            // Sincronizzazione automatica silenziosa al salvataggio
+            syncToCloud(true);
+        }
+
+        async function syncToCloud(silent = false) {
+            try {
+                await fetch(SYNC_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify(db)
+                });
+                if(!silent) alert("Dati salvati su Google Drive!");
+            } catch (e) {
+                if(!silent) alert("Errore Cloud: " + e);
+            }
+        }
+
+        async function loadFromCloud() {
+            if(!confirm("Vuoi sovrascrivere i dati attuali con quelli salvati su Google Drive?")) return;
+            try {
+                const response = await fetch(SYNC_URL);
+                const cloudData = await response.json();
+                if(cloudData && cloudData.vehicles) {
+                    db = cloudData;
+                    localStorage.setItem('carTrackerDB_v4', JSON.stringify(db));
+                    alert("Dati recuperati con successo!");
+                    location.reload();
+                } else {
+                    alert("Nessun dato valido trovato nel Cloud.");
+                }
+            } catch (e) {
+                alert("Errore nel recupero dati: " + e);
+            }
+        }
+
+        function toggleMenu() { document.getElementById('vMenu').classList.toggle('show'); }
+
+        const iconMap = {
+            'Tagliando': 'bi-wrench-adjustable',
+            'Revisione': 'bi-calendar-check',
+            'Cambio Gomme': 'bi-disc',
+            'Inversione Gomme': 'bi-arrow-repeat',
+            'Ricambi': 'bi-box-seam',
+            'Altro': 'bi-gear'
+        };
+
+        function getAllKmSorted(v) {
+            let combined = [];
+            v.kmLogs.forEach(l => combined.push({ date: new Date(l.d), km: parseInt(l.v), label: l.d }));
+            v.maint.forEach(m => { if(m.k) combined.push({ date: new Date(m.d_raw), km: parseInt(m.k), label: m.d_raw }); });
+            return combined.sort((a, b) => a.date - b.date);
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.nav-top-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`t-${tab}`).classList.add('active');
+            render(tab);
+        }
+
+        function render(tab) {
+            const cont = document.getElementById('content');
+            const v = db.vehicles.find(x => x.id === db.activeId);
+            
+            if (!v && tab !== 'settings') {
+                cont.innerHTML = `<div class="card p-10 text-center border-dashed"><i class="bi bi-plus-lg text-orange-500 text-4xl mb-4 block"></i><p class="text-gray-400 text-sm">Configura il tuo mezzo nella scheda <b>Mezzi</b>.</p></div>`;
+                return;
+            }
+
+            if (tab === 'dashboard') {
+                const sortedData = getAllKmSorted(v);
+                const lastEntry = sortedData.length ? sortedData[sortedData.length - 1] : { km: 0 };
+                const getM = (type) => [...v.maint].sort((a,b) => new Date(b.d_raw) - new Date(a.d_raw)).find(m => m.t === type) || {d: '---', k: 0};
+                
+                cont.innerHTML = `
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="card p-4">
+                            <div class="flex items-center gap-2 mb-2"><i class="bi bi-speedometer2 text-orange-500 text-xs"></i><p class="text-[10px] text-orange-500 uppercase font-bold">Km Attuali</p></div>
+                            <p class="text-2xl font-black">${lastEntry.km.toLocaleString()}</p>
+                            <p class="text-[9px] text-gray-500">${lastEntry.label ? lastEntry.label.split('-').reverse().join('/') : ''}</p>
+                        </div>
+                        <div class="card p-4">
+                            <div class="flex items-center gap-2 mb-2"><i class="bi bi-wrench-adjustable text-gray-500 text-xs"></i><p class="text-[10px] text-gray-500 uppercase font-bold">Tagliando</p></div>
+                            <p class="text-lg font-black">${getM('Tagliando').k.toLocaleString()} km</p>
+                            <p class="text-[9px] text-gray-500">${getM('Tagliando').d}</p>
+                        </div>
+                        <div class="card p-4">
+                            <div class="flex items-center gap-2 mb-2"><i class="bi bi-calendar2-check text-orange-500 text-xs"></i><p class="text-[10px] text-orange-500 uppercase font-bold">Revisione</p></div>
+                            <p class="text-lg font-bold">${getM('Revisione').d}</p>
+                            <p class="text-[9px] text-gray-500">${getM('Revisione').k !== 0 ? getM('Revisione').k.toLocaleString() + ' km' : ''}</p>
+                        </div>
+                        <div class="card p-4">
+                            <div class="flex items-center gap-2 mb-2"><i class="bi bi-disc text-white text-xs"></i><p class="text-[10px] text-white uppercase font-bold">Gomme</p></div>
+                            <p class="text-lg font-black">${(lastEntry.km - getM('Cambio Gomme').k).toLocaleString()} km</p>
+                            <p class="text-[9px] text-gray-500">${getM('Cambio Gomme').d !== '---' ? 'Dal ' + getM('Cambio Gomme').d : ''}</p>
+                        </div>
+                    </div>
+                    <div class="card p-4"><p class="text-[10px] text-gray-500 uppercase font-bold mb-4 text-center">Andamento Temporale Reale</p><canvas id="chart" height="180"></canvas></div>
+                    <div class="card p-5">
+                        <div class="flex justify-between items-center mb-4"><h3 class="text-xs font-bold uppercase text-orange-500 tracking-widest">Scadenze</h3><button onclick="showDeadlineForm()" class="text-[10px] bg-[#16161c] px-2 py-1 rounded border border-gray-700 text-gray-400">+ Aggiungi</button></div>
+                        <div id="deadlineForm" class="hidden space-y-3 mb-6 bg-[#16161c] p-3 rounded-xl border border-gray-800">
+                            <input type="text" id="deadTitle" placeholder="Titolo (es. Assicurazione)" class="input-dark">
+                            <div class="flex gap-2"><input type="date" id="deadDate" class="input-dark flex-1"><input type="number" id="deadKm" placeholder="Km limite" class="input-dark flex-1"></div>
+                            <button onclick="addDeadline()" class="btn-orange text-[10px] py-2">Salva</button>
+                        </div>
+                        <div class="space-y-3">${(v.deadlines || []).map((d, i) => {
+                            let results = [];
+                            if(d.date) { const diff = Math.ceil((new Date(d.date) - new Date()) / 86400000); results.push(diff > 0 ? `${diff} gg` : "Scaduto!"); }
+                            if(d.km) { const diffKm = d.km - lastEntry.km; results.push(diffKm > 0 ? `${diffKm.toLocaleString()} km` : "Soglia!"); }
+                            const statusStr = results.join(' / ');
+                            return `<div class="flex justify-between items-center bg-[#16161c]/50 p-3 rounded-lg border border-gray-800/30"><div><p class="text-sm font-bold text-white">${d.title}</p></div><div class="flex items-center gap-2"><span class="badge-deadline ${statusStr.includes('Scaduto') || statusStr.includes('Soglia') ? 'bg-red-900/30 text-red-500' : 'bg-orange-900/30 text-orange-500'}">${statusStr}</span><button onclick="delDeadline(${i})" class="text-gray-700"><i class="bi bi-x-circle"></i></button></div></div>`;
+                        }).join('') || '<p class="text-gray-600 text-[10px] text-center py-2 italic tracking-widest uppercase">Tutto Sotto Controllo</p>'}</div>
+                    </div>
+                `;
+                if(sortedData.length > 0) { setTimeout(() => renderChart(sortedData), 100); }
+            }
+
+            if (tab === 'km') {
+                const logs = [...v.kmLogs].sort((a,b) => new Date(b.d) - new Date(a.d));
+                cont.innerHTML = `<div class="card p-5 space-y-4"><h3 class="font-bold text-xs text-orange-500 uppercase">Nuova Lettura</h3><div class="flex gap-2"><input type="date" id="kDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="kVal" placeholder="Km totali" class="input-dark flex-1"></div><input type="text" id="kDesc" placeholder="Descrizione (opzionale)" class="input-dark"><button onclick="addKm()" class="btn-orange text-sm">Registra</button></div><div class="card p-5"><h3 class="text-[10px] font-bold uppercase text-gray-500 mb-4 tracking-widest">Storico</h3><div class="divide-y divide-gray-800">${logs.map((l, i) => `<div class="flex justify-between items-start py-3"><div><p class="text-white font-bold">${parseInt(l.v).toLocaleString()} km</p><p class="text-[10px] text-gray-500">${l.d.split('-').reverse().join('/')}</p>${l.desc ? `<p class="text-[10px] text-orange-500/80 mt-1 italic">${l.desc}</p>` : ''}</div><button onclick="delKm(${i})" class="text-gray-700 pt-1"><i class="bi bi-trash"></i></button></div>`).join('') || '<p class="text-gray-600 text-xs italic">Nessun dato.</p>'}</div></div>`;
+            }
+
+            if (tab === 'maint') {
+                const logs = [...v.maint].sort((a,b) => new Date(b.d_raw) - new Date(a.d_raw));
+                cont.innerHTML = `<div class="card p-5 space-y-4 mb-4"><h3 class="font-bold text-xs text-orange-500 uppercase">Nuovo Intervento</h3><select id="mType" class="input-dark"><option>Tagliando</option><option>Revisione</option><option>Cambio Gomme</option><option>Inversione Gomme</option><option>Ricambi</option><option>Altro</option></select><div class="flex gap-2"><input type="date" id="mDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="mKm" placeholder="Km" class="input-dark flex-1"></div><textarea id="mDesc" placeholder="Descrizione lavori (opzionale)" class="input-dark h-20"></textarea><button onclick="addM()" class="btn-orange text-sm">Salva Intervento</button></div><div class="card p-5"><h3 class="text-[10px] font-bold uppercase text-gray-500 mb-4 tracking-widest">Officina</h3><div class="space-y-3">${logs.map((m, i) => `<div class="bg-[#16161c] p-3 rounded-xl border border-gray-800"><div class="flex justify-between items-start"><div class="flex items-center gap-3"><div class="bg-orange-500/10 p-2.5 rounded-lg border border-orange-500/20"><i class="bi ${iconMap[m.t] || 'bi-tools'} text-orange-500"></i></div><div><p class="text-orange-500 font-bold text-sm leading-tight">${m.t}</p><p class="text-[10px] text-white mt-0.5">${m.k.toLocaleString()} km • ${m.d}</p></div></div><button onclick="delM(${i})" class="text-gray-700 p-1"><i class="bi bi-trash"></i></button></div>${m.desc ? `<p class="mt-2 text-[11px] text-gray-400 border-t border-gray-800 pt-2">${m.desc}</p>` : ''}</div>`).join('') || '<p class="text-gray-600 text-xs italic text-center py-4">Nessun intervento registrato.</p>'}</div></div>`;
+            }
+
+            if (tab === 'settings') {
+                cont.innerHTML = `
+                    <div class="card p-5 space-y-4">
+                        <h3 class="font-bold text-orange-500 uppercase text-xs" id="formTitle">Aggiungi Veicolo</h3>
+                        <select id="vTipo" class="input-dark"><option value="auto">Auto</option><option value="moto">Moto</option></select>
+                        <div class="grid grid-cols-2 gap-2"><input type="text" id="vMarca" placeholder="Marca" class="input-dark"><input type="text" id="vMod" placeholder="Modello" class="input-dark"></div>
+                        <div class="grid grid-cols-2 gap-2"><input type="text" id="vTargaInput" placeholder="Targa" class="input-dark"><input type="number" id="vAnnoInput" placeholder="Anno" class="input-dark"></div>
+                        <button onclick="saveVehicle()" id="btnSaveV" class="btn-orange text-sm">Salva Veicolo</button>
+                        <button onclick="cancelEdit()" id="btnCancelEdit" class="hidden text-xs text-gray-500 w-full text-center py-2">Annulla Modifica</button>
+                    </div>
+
+                    <div class="card p-5 space-y-4">
+                        <h3 class="font-bold text-blue-500 uppercase text-xs tracking-widest">Google Cloud Sync</h3>
+                        <div class="flex gap-2">
+                            <button onclick="syncToCloud()" class="flex-1 bg-blue-900/20 border border-blue-800 text-blue-400 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-cloud-upload mr-2"></i>Salva Cloud</button>
+                            <button onclick="loadFromCloud()" class="flex-1 bg-gray-800 border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-cloud-download mr-2"></i>Recupera</button>
+                        </div>
+                    </div>
+
+                    <div class="card p-5 space-y-4">
+                        <h3 class="font-bold text-gray-500 uppercase text-xs tracking-widest">Backup Manuale</h3>
+                        <div class="flex gap-2">
+                            <button onclick="exportData()" class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-download mr-2"></i>Esporta File</button>
+                            <label class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase text-center cursor-pointer"><i class="bi bi-upload mr-2"></i>Importa<input type="file" class="hidden" onchange="importData(event)"></label>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3 mt-6">
+                        ${db.vehicles.map(veh => `
+                            <div class="card p-4 flex justify-between items-center border-gray-800/50">
+                                <div><p class="font-bold text-white text-sm">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</p><p class="text-[10px] text-gray-500 font-mono">${veh.targa} • ${veh.anno}</p></div>
+                                <div class="flex gap-4"><button onclick="editVehicle(${veh.id})" class="text-orange-500 text-lg"><i class="bi bi-pencil-square"></i></button><button onclick="deleteVehicle(${veh.id})" class="text-red-900/60 text-lg"><i class="bi bi-trash3"></i></button></div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        }
+
+        function renderChart(dataPoints) {
+            const ctx = document.getElementById('chart'); if(!ctx) return;
+            const chartData = dataPoints.map(p => ({ x: p.date.getTime(), y: p.km }));
+            const minX = chartData[0].x; const maxX = chartData[chartData.length - 1].x;
+            new Chart(ctx, { 
+                type: 'line', 
+                data: { datasets: [{ data: chartData, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.05)', tension: 0.2, fill: true, pointRadius: 4, pointBackgroundColor: '#f97316', borderWidth: 2 }] }, 
+                options: { 
+                    responsive: true, 
+                    plugins: { legend: { display: false } }, 
+                    layout: { padding: { left: -5, right: 0 } }, 
+                    scales: { 
+                        y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 10 } } }, 
+                        x: { type: 'linear', min: minX, max: maxX, bounds: 'ticks', grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 }, autoSkip: true, maxTicksLimit: 5, minTicksLimit: 5, maxRotation: 0, minRotation: 0, callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) } } 
+                    } 
+                } 
+            });
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `tracker_backup_${new Date().toISOString().split('T')[0]}.json`);
+            dlAnchorElem.click();
+        }
+
+        function importData(event) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if(imported.vehicles) {
+                        db = imported;
+                        save();
+                        updateHeader();
+                        render('settings');
+                        alert("Dati importati con successo!");
+                    }
+                } catch(err) { alert("File non valido."); }
+            };
+            reader.readAsText(event.target.files[0]);
+        }
+
+        function saveVehicle() { const t = document.getElementById('vTipo').value, ma = document.getElementById('vMarca').value, mo = document.getElementById('vMod').value, ta = document.getElementById('vTargaInput').value, an = document.getElementById('vAnnoInput').value; if(!ma || !mo) return; if (editingId) { Object.assign(db.vehicles.find(x => x.id === editingId), { tipo:t, marca:ma, modello:mo, targa:ta, anno:an }); editingId = null; } else { const id = Date.now(); db.vehicles.push({ id, tipo:t, marca:ma, modello:mo, targa:ta, anno:an, kmLogs: [], maint: [], deadlines: [] }); db.activeId = id; } save(); updateHeader(); render('settings'); }
+        function editVehicle(id) { const v = db.vehicles.find(x => x.id === id); editingId = id; render('settings'); document.getElementById('formTitle').innerText = "Modifica Veicolo"; document.getElementById('vTipo').value = v.tipo; document.getElementById('vMarca').value = v.marca; document.getElementById('vMod').value = v.modello; document.getElementById('vTargaInput').value = v.targa; document.getElementById('vAnnoInput').value = v.anno; document.getElementById('btnSaveV').innerText = "Aggiorna Dati"; document.getElementById('btnCancelEdit').classList.remove('hidden'); }
+        function deleteVehicle(id) { if(confirm("Eliminare?")) { db.vehicles = db.vehicles.filter(x => x.id !== id); if(db.activeId === id) db.activeId = db.vehicles.length ? db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
+        function updateHeader() { const v = db.vehicles.find(x => x.id === db.activeId); if(v) { document.getElementById('vName').innerText = `${v.marca} ${v.modello}`; document.getElementById('vTarga').innerText = v.targa || '------'; document.getElementById('vAnno').innerText = v.anno || '----'; document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl'; } document.getElementById('vMenu').innerHTML = db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join(''); }
+        function addKm() { const v = db.vehicles.find(x => x.id === db.activeId); const val = document.getElementById('kVal').value; const date = document.getElementById('kDate').value; const desc = document.getElementById('kDesc').value; if(!val || !v) return; v.kmLogs.push({ d: date, v: parseInt(val), desc: desc }); save(); switchTab('dashboard'); }
+        function addM() { const v = db.vehicles.find(x => x.id === db.activeId); const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; if(!k || !v) return; v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); save(); switchTab('dashboard'); }
+        function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value, date = document.getElementById('deadDate').value, km = document.getElementById('deadKm').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date, km: km ? parseInt(km) : null }); save(); render('dashboard'); }
+        function delKm(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
+        function delM(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.maint.splice(i, 1); save(); render('maint'); }
+        function delDeadline(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.deadlines.splice(i, 1); save(); render('dashboard'); }
+        function showDeadlineForm() { document.getElementById('deadlineForm').classList.toggle('hidden'); }
+        function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
+        function cancelEdit() { editingId = null; render('settings'); }
+
+        updateHeader();
+        switchTab('dashboard');
+    </script>
+</body>
+</html>
