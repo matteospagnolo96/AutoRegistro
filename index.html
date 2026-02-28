@@ -3,8 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tracker Pro">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#f97316">
+    
+    <link rel="manifest" href="manifest.json">
+
     <title>Car & Moto Tracker Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -64,14 +71,7 @@
         function save() { localStorage.setItem('carTrackerDB_v4', JSON.stringify(db)); }
         function toggleMenu() { document.getElementById('vMenu').classList.toggle('show'); }
 
-        const iconMap = {
-            'Tagliando': 'bi-wrench-adjustable',
-            'Revisione': 'bi-calendar-check',
-            'Cambio Gomme': 'bi-disc',
-            'Inversione Gomme': 'bi-arrow-repeat',
-            'Ricambi': 'bi-box-seam',
-            'Altro': 'bi-gear'
-        };
+        const iconMap = { 'Tagliando': 'bi-wrench-adjustable', 'Revisione': 'bi-calendar-check', 'Cambio Gomme': 'bi-disc', 'Inversione Gomme': 'bi-arrow-repeat', 'Ricambi': 'bi-box-seam', 'Altro': 'bi-gear' };
 
         function getAllKmSorted(v) {
             let combined = [];
@@ -213,7 +213,6 @@
                                 <input type="file" class="hidden" onchange="importData(event)">
                             </label>
                         </div>
-                        
                         <div class="pt-4 border-t border-gray-800 space-y-3">
                             <h3 class="font-bold text-orange-500 uppercase text-[9px] tracking-widest">Sincronizzazione Cloud</h3>
                             <input type="text" id="cloudBin" name="username" autocomplete="username" placeholder="Bin ID (Username)" class="input-dark text-xs" value="${db.cloudBin || ''}">
@@ -246,14 +245,7 @@
                     plugins: { legend: { display: false } }, 
                     scales: { 
                         y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 10 } } }, 
-                        x: { 
-                            type: 'linear', 
-                            min: minX, max: maxX, grid: { display: false }, 
-                            ticks: { 
-                                color: '#6b7280', font: { size: 9 }, maxTicksLimit: 5,
-                                callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) 
-                            } 
-                        } 
+                        x: { type: 'linear', min: minX, max: maxX, grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 }, maxTicksLimit: 5, callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) } } 
                     } 
                 } 
             });
@@ -292,20 +284,13 @@
         function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
         function cancelEdit() { editingId = null; render('settings'); }
 
-        // Funzione di Sincronizzazione Cloud
         async function syncCloud() {
             const key = document.getElementById('cloudKey').value;
             const bin = document.getElementById('cloudBin').value;
             if(!key || !bin) return alert("Inserisci Key e Bin ID");
-            
             db.cloudKey = key; db.cloudBin = bin; save();
-            
             try {
-                const res = await fetch(`https://api.jsonbin.io/v3/b/${bin}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Key': key },
-                    body: JSON.stringify(db)
-                });
+                const res = await fetch(`https://api.jsonbin.io/v3/b/${bin}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Master-Key': key }, body: JSON.stringify(db) });
                 if(res.ok) alert("Sincronizzazione riuscita!");
                 else alert("Errore: Verifica Key e Bin ID");
             } catch(e) { alert("Errore di rete."); }
@@ -313,6 +298,13 @@
 
         updateHeader();
         switchTab('dashboard');
+
+        // REGISTRAZIONE SERVICE WORKER PER PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error', err));
+            });
+        }
     </script>
 </body>
 </html>
