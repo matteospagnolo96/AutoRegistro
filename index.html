@@ -213,11 +213,12 @@
                                 <input type="file" class="hidden" onchange="importData(event)">
                             </label>
                         </div>
+                        
                         <div class="pt-4 border-t border-gray-800 space-y-3">
                             <h3 class="font-bold text-orange-500 uppercase text-[9px] tracking-widest">Sincronizzazione Cloud</h3>
-                            <input type="text" id="cloudKey" placeholder="API Key" class="input-dark text-xs" value="${db.cloudKey || ''}">
-                            <input type="text" id="cloudBin" placeholder="Bin ID" class="input-dark text-xs" value="${db.cloudBin || ''}">
-                            <button onclick="syncCloud()" class="w-full bg-orange-500/10 border border-orange-500/50 text-orange-500 text-[10px] py-2 rounded-lg font-bold uppercase">Sincronizza Ora</button>
+                            <input type="text" id="cloudBin" name="username" autocomplete="username" placeholder="Bin ID (Username)" class="input-dark text-xs" value="${db.cloudBin || ''}">
+                            <input type="password" id="cloudKey" name="password" autocomplete="current-password" placeholder="API Key (Password)" class="input-dark text-xs" value="${db.cloudKey || ''}">
+                            <button onclick="syncCloud()" class="w-full bg-orange-500/10 border border-orange-500/50 text-orange-500 text-[10px] py-2 rounded-lg font-bold uppercase">Sincronizza e Salva</button>
                         </div>
                     </div>
 
@@ -243,23 +244,13 @@
                 options: { 
                     responsive: true, 
                     plugins: { legend: { display: false } }, 
-                    layout: { padding: { left: -5, right: 0 } }, 
                     scales: { 
                         y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 10 } } }, 
                         x: { 
                             type: 'linear', 
-                            min: minX, 
-                            max: maxX, 
-                            bounds: 'ticks', 
-                            grid: { display: false }, 
+                            min: minX, max: maxX, grid: { display: false }, 
                             ticks: { 
-                                color: '#6b7280', 
-                                font: { size: 9 }, 
-                                autoSkip: true, 
-                                maxTicksLimit: 5, 
-                                minTicksLimit: 5,
-                                maxRotation: 0,
-                                minRotation: 0,
+                                color: '#6b7280', font: { size: 9 }, maxTicksLimit: 5,
                                 callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) 
                             } 
                         } 
@@ -272,7 +263,7 @@
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
             const dlAnchorElem = document.createElement('a');
             dlAnchorElem.setAttribute("href", dataStr);
-            dlAnchorElem.setAttribute("download", `tracker_backup_${new Date().toISOString().split('T')[0]}.json`);
+            dlAnchorElem.setAttribute("download", `tracker_backup.json`);
             dlAnchorElem.click();
         }
 
@@ -281,14 +272,8 @@
             reader.onload = function(e) {
                 try {
                     const imported = JSON.parse(e.target.result);
-                    if(imported.vehicles) {
-                        db = imported;
-                        save();
-                        updateHeader();
-                        render('settings');
-                        alert("Dati importati con successo!");
-                    }
-                } catch(err) { alert("File non valido."); }
+                    if(imported.vehicles) { db = imported; save(); updateHeader(); render('settings'); alert("Importato!"); }
+                } catch(err) { alert("Errore file."); }
             };
             reader.readAsText(event.target.files[0]);
         }
@@ -297,18 +282,9 @@
         function editVehicle(id) { const v = db.vehicles.find(x => x.id === id); editingId = id; render('settings'); document.getElementById('formTitle').innerText = "Modifica Veicolo"; document.getElementById('vTipo').value = v.tipo; document.getElementById('vMarca').value = v.marca; document.getElementById('vMod').value = v.modello; document.getElementById('vTargaInput').value = v.targa; document.getElementById('vAnnoInput').value = v.anno; document.getElementById('btnSaveV').innerText = "Aggiorna Dati"; document.getElementById('btnCancelEdit').classList.remove('hidden'); }
         function deleteVehicle(id) { if(confirm("Eliminare?")) { db.vehicles = db.vehicles.filter(x => x.id !== id); if(db.activeId === id) db.activeId = db.vehicles.length ? db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
         function updateHeader() { const v = db.vehicles.find(x => x.id === db.activeId); if(v) { document.getElementById('vName').innerText = `${v.marca} ${v.modello}`; document.getElementById('vTarga').innerText = v.targa || '------'; document.getElementById('vAnno').innerText = v.anno || '----'; document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl'; } document.getElementById('vMenu').innerHTML = db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join(''); }
-        function addKm() { 
-            const v = db.vehicles.find(x => x.id === db.activeId); 
-            const val = document.getElementById('kVal').value; 
-            const date = document.getElementById('kDate').value; 
-            const desc = document.getElementById('kDesc').value;
-            if(!val || !v) return; 
-            v.kmLogs.push({ d: date, v: parseInt(val), desc: desc }); 
-            save(); 
-            switchTab('dashboard'); 
-        }
+        function addKm() { const v = db.vehicles.find(x => x.id === db.activeId); const val = document.getElementById('kVal').value; if(!val || !v) return; v.kmLogs.push({ d: document.getElementById('kDate').value, v: parseInt(val), desc: document.getElementById('kDesc').value }); save(); switchTab('dashboard'); }
         function addM() { const v = db.vehicles.find(x => x.id === db.activeId); const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; if(!k || !v) return; v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); save(); switchTab('dashboard'); }
-        function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value, date = document.getElementById('deadDate').value, km = document.getElementById('deadKm').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date, km: km ? parseInt(km) : null }); save(); render('dashboard'); }
+        function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date: document.getElementById('deadDate').value, km: document.getElementById('deadKm').value ? parseInt(document.getElementById('deadKm').value) : null }); save(); render('dashboard'); }
         function delKm(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
         function delM(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.maint.splice(i, 1); save(); render('maint'); }
         function delDeadline(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.deadlines.splice(i, 1); save(); render('dashboard'); }
@@ -316,7 +292,7 @@
         function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
         function cancelEdit() { editingId = null; render('settings'); }
 
-        // --- NUOVA FUNZIONE SYNC ---
+        // Funzione di Sincronizzazione Cloud
         async function syncCloud() {
             const key = document.getElementById('cloudKey').value;
             const bin = document.getElementById('cloudBin').value;
@@ -330,8 +306,9 @@
                     headers: { 'Content-Type': 'application/json', 'X-Master-Key': key },
                     body: JSON.stringify(db)
                 });
-                if(res.ok) alert("Sincronizzazione completata!");
-            } catch(e) { alert("Errore connessione"); }
+                if(res.ok) alert("Sincronizzazione riuscita!");
+                else alert("Errore: Verifica Key e Bin ID");
+            } catch(e) { alert("Errore di rete."); }
         }
 
         updateHeader();
