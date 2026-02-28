@@ -2,59 +2,32 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Tracker Pro</title>
-    
-    <link rel="manifest" href="manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0f0f13">
-    <link rel="apple-touch-icon" href="icon-192.png">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Car & Moto Tracker Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     
     <style>
-        :root { --orange-main: #f97316; }
-        body { 
-            background-color: #0f0f13; 
-            color: #e5e7eb; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            -webkit-tap-highlight-color: transparent;
-            overscroll-behavior-y: contain; /* Evita il rimbalzo su mobile */
-            user-select: none;
-        }
+        body { background-color: #0f0f13; color: #e5e7eb; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
         .card { background-color: #1e1e24; border-radius: 1.25rem; border: 1px solid #2a2a32; }
         .input-dark { background-color: #16161c; border: 1px solid #2a2a32; color: white; border-radius: 0.75rem; padding: 0.8rem; width: 100%; outline: none; font-size: 0.9rem; }
-        .input-dark:focus { border-color: var(--orange-main); }
-        .btn-orange { background-color: var(--orange-main); color: black; font-weight: 800; border-radius: 0.75rem; padding: 1rem; width: 100%; cursor: pointer; text-transform: uppercase; }
-        
-        /* Navigation */
-        .nav-top-item { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; font-size: 0.65rem; font-weight: 700; color: #6b7280; flex: 1; padding: 0.8rem 0; border-bottom: 2px solid transparent; transition: all 0.2s; }
-        .nav-top-item.active { color: var(--orange-main); border-bottom: 2px solid var(--orange-main); background: linear-gradient(to bottom, transparent, rgba(249, 115, 22, 0.05)); }
-        
-        /* Dropdown Mezzi */
-        .vehicle-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #16161c; border: 1px solid #2a2a32; display: none; z-index: 100; border-radius: 0 0 1rem 1rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }
+        .input-dark:focus { border-color: #f97316; }
+        .btn-orange { background-color: #f97316; color: black; font-weight: 800; border-radius: 0.75rem; padding: 1rem; width: 100%; cursor: pointer; text-transform: uppercase; }
+        .nav-top-item { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; font-size: 0.65rem; font-weight: 700; color: #6b7280; flex: 1; padding: 0.8rem 0; border-bottom: 2px solid transparent; }
+        .nav-top-item.active { color: #f97316; border-bottom: 2px solid #f97316; background: linear-gradient(to bottom, transparent, rgba(249, 115, 22, 0.05)); }
+        .vehicle-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #16161c; border: 1px solid #2a2a32; display: none; z-index: 100; border-radius: 0 0 1rem 1rem; }
         .vehicle-dropdown.show { display: block; }
         .v-opt { padding: 1rem; border-bottom: 1px solid #2a2a32; color: #9ca3af; cursor: pointer; }
-        
         .badge-deadline { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 0.5rem; font-weight: bold; }
-        
-        /* Modal Style */
-        #cloudModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; align-items: center; justify-content: center; padding: 1.5rem; backdrop-filter: blur(4px); }
-        #cloudModal.show { display: flex; }
-
-        /* Safe Area for modern phones */
-        header { padding-top: env(safe-area-inset-top); }
     </style>
 </head>
 <body class="pb-10">
 
     <div id="app" class="max-w-md mx-auto">
         <header class="bg-[#0f0f13] border-b border-gray-800/50 sticky top-0 z-50">
-            <div class="flex items-center justify-between px-2">
-                <div class="flex-1 p-4 flex items-center gap-3 cursor-pointer" onclick="toggleMenu()">
+            <div class="p-4 flex items-center justify-between cursor-pointer" onclick="toggleMenu()">
+                <div class="flex items-center gap-3">
                     <div class="bg-[#1e1e24] p-2.5 rounded-xl border border-gray-800 shadow-lg">
                         <i id="headerIcon" class="bi bi-car-front-fill text-orange-500 text-xl"></i>
                     </div>
@@ -66,88 +39,28 @@
                             <span id="vAnno" class="text-[10px] text-gray-400 font-bold">----</span>
                         </div>
                     </div>
-                    <i class="bi bi-chevron-down text-orange-500 text-xs ml-1"></i>
+                    <i class="bi bi-chevron-down text-orange-500 text-xs ml-auto"></i>
                 </div>
-
-                <button onclick="toggleCloudModal()" class="p-4 text-gray-500">
-                    <i class="bi bi-cloud-arrow-up text-xl"></i>
-                </button>
             </div>
-
-            <div id="vMenu" class="vehicle-dropdown"></div>
+            <div id="vMenu" class="vehicle-dropdown shadow-2xl"></div>
 
             <nav class="flex justify-around border-t border-gray-800/30">
-                <button onclick="switchTab('dashboard')" class="nav-top-item active" id="t-dashboard"><i class="bi bi-grid-1x2-fill text-lg"></i>Dash</button>
+                <button onclick="switchTab('dashboard')" class="nav-top-item active" id="t-dashboard"><i class="bi bi-grid-1x2-fill text-lg"></i>Dashboard</button>
                 <button onclick="switchTab('km')" class="nav-top-item" id="t-km"><i class="bi bi-speedometer2 text-lg"></i>Km</button>
                 <button onclick="switchTab('maint')" class="nav-top-item" id="t-maint"><i class="bi bi-tools text-lg"></i>Officina</button>
                 <button onclick="switchTab('settings')" class="nav-top-item" id="t-settings"><i class="bi bi-plus-circle text-lg"></i>Mezzi</button>
             </nav>
         </header>
 
-        <div id="content" class="p-4 space-y-4 pb-24"></div>
-    </div>
-
-    <div id="cloudModal">
-        <div class="card p-6 w-full max-w-xs space-y-4">
-            <div class="text-center">
-                <i class="bi bi-cloud-fill text-3xl text-orange-500 mb-2 block"></i>
-                <h3 class="font-bold text-white uppercase text-sm">Cloud Sync</h3>
-            </div>
-            <input type="password" id="jsbKey" placeholder="Master Key" class="input-dark">
-            <input type="text" id="jsbId" placeholder="Bin ID" class="input-dark">
-            <button onclick="saveCloudConfig()" class="btn-orange text-xs py-3">Sincronizza</button>
-            <button onclick="toggleCloudModal()" class="text-xs text-gray-400 w-full">Chiudi</button>
-        </div>
+        <div id="content" class="p-4 space-y-4 pb-20"></div>
     </div>
 
     <script>
         let db = JSON.parse(localStorage.getItem('carTrackerDB_v4')) || { activeId: null, vehicles: [] };
-        let cloudConfig = JSON.parse(localStorage.getItem('carTrackerCloud')) || { key: '', id: '' };
         let editingId = null;
 
-        // --- CORE LOGIC ---
-        async function save() { 
-            localStorage.setItem('carTrackerDB_v4', JSON.stringify(db)); 
-            if (cloudConfig.key && cloudConfig.id) await syncToCloud();
-        }
-
-        async function syncToCloud() {
-            try {
-                await fetch(`https://api.jsonbin.io/v3/b/${cloudConfig.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Key': cloudConfig.key },
-                    body: JSON.stringify(db)
-                });
-            } catch (e) { console.error(e); }
-        }
-
-        async function loadFromCloud() {
-            if (!cloudConfig.key || !cloudConfig.id) return;
-            try {
-                const res = await fetch(`https://api.jsonbin.io/v3/b/${cloudConfig.id}/latest`, {
-                    headers: { 'X-Master-Key': cloudConfig.key }
-                });
-                const remote = await res.json();
-                if (remote.record) {
-                    db = remote.record;
-                    save();
-                    updateHeader();
-                    render('dashboard');
-                }
-            } catch (e) { console.error(e); }
-        }
-
+        function save() { localStorage.setItem('carTrackerDB_v4', JSON.stringify(db)); }
         function toggleMenu() { document.getElementById('vMenu').classList.toggle('show'); }
-        function toggleCloudModal() { document.getElementById('cloudModal').classList.toggle('show'); }
-        
-        function saveCloudConfig() {
-            cloudConfig.key = document.getElementById('jsbKey').value;
-            cloudConfig.id = document.getElementById('jsbId').value;
-            localStorage.setItem('carTrackerCloud', JSON.stringify(cloudConfig));
-            loadFromCloud().then(() => toggleCloudModal());
-        }
-
-        const iconMap = { 'Tagliando': 'bi-wrench', 'Revisione': 'bi-calendar-check', 'Cambio Gomme': 'bi-disc', 'Inversione Gomme': 'bi-arrow-repeat', 'Ricambi': 'bi-box', 'Altro': 'bi-gear' };
 
         function getAllKmSorted(v) {
             let combined = [];
@@ -167,7 +80,7 @@
             const v = db.vehicles.find(x => x.id === db.activeId);
             
             if (!v && tab !== 'settings') {
-                cont.innerHTML = `<div class="card p-10 text-center border-dashed border-gray-700 m-4"><i class="bi bi-plus-circle text-orange-500 text-4xl mb-4 block"></i><p class="text-gray-400">Aggiungi il tuo primo mezzo nella scheda <b>Mezzi</b>.</p></div>`;
+                cont.innerHTML = `<div class="card p-10 text-center border-dashed"><i class="bi bi-plus-lg text-orange-500 text-4xl mb-4 block"></i><p class="text-gray-400 text-sm">Configura il tuo mezzo nella scheda <b>Mezzi</b>.</p></div>`;
                 return;
             }
 
@@ -178,20 +91,16 @@
                 
                 cont.innerHTML = `
                     <div class="grid grid-cols-2 gap-3">
-                        <div class="card p-4">
-                            <p class="text-[10px] text-orange-500 uppercase font-bold mb-1">Km Totali</p>
-                            <p class="text-2xl font-black">${lastEntry.km.toLocaleString()}</p>
-                        </div>
-                        <div class="card p-4">
-                            <p class="text-[10px] text-gray-500 uppercase font-bold mb-1">Ultimo Tagliando</p>
-                            <p class="text-lg font-bold">${getM('Tagliando').k.toLocaleString()} <span class="text-[10px] opacity-50">km</span></p>
-                        </div>
+                        <div class="card p-4"><p class="text-[10px] text-orange-500 uppercase font-bold mb-3">Km Attuali</p><p class="text-2xl font-black">${lastEntry.km.toLocaleString()}</p></div>
+                        <div class="card p-4"><p class="text-[10px] text-gray-500 uppercase font-bold mb-3">Tagliando</p><p class="text-lg font-bold">${getM('Tagliando').d}</p><p class="text-[9px] text-gray-600">a ${getM('Tagliando').k.toLocaleString()} km</p></div>
+                        <div class="card p-4"><p class="text-[10px] text-orange-500 uppercase font-bold mb-3">Revisione</p><p class="text-lg font-bold">${getM('Revisione').d}</p></div>
+                        <div class="card p-4"><p class="text-[10px] text-white uppercase font-bold mb-3">Stato Gomme</p><p class="text-lg font-black">${(lastEntry.km - getM('Cambio Gomme').k).toLocaleString()} km</p></div>
                     </div>
-                    <div class="card p-4"><canvas id="chart" height="180"></canvas></div>
+                    <div class="card p-4 overflow-hidden"><p class="text-[10px] text-gray-500 uppercase font-bold mb-4 text-center">Andamento Temporale</p><canvas id="chart" height="180" style="margin-left: -10px; margin-right: -10px; width: calc(100% + 20px) !important;"></canvas></div>
                     <div class="card p-5">
-                        <div class="flex justify-between items-center mb-4"><h3 class="text-xs font-bold uppercase text-orange-500">Scadenze</h3><button onclick="showDeadlineForm()" class="text-[10px] bg-[#16161c] px-3 py-1 rounded border border-gray-700 text-gray-400">Aggiungi</button></div>
+                        <div class="flex justify-between items-center mb-4"><h3 class="text-xs font-bold uppercase text-orange-500 tracking-widest">Scadenze</h3><button onclick="showDeadlineForm()" class="text-[10px] bg-[#16161c] px-2 py-1 rounded border border-gray-700 text-gray-400">+ Aggiungi</button></div>
                         <div id="deadlineForm" class="hidden space-y-3 mb-6 bg-[#16161c] p-3 rounded-xl border border-gray-800">
-                            <input type="text" id="deadTitle" placeholder="Cosa scade? (es. Bollo)" class="input-dark">
+                            <input type="text" id="deadTitle" placeholder="Titolo (es. Assicurazione)" class="input-dark">
                             <div class="flex gap-2"><input type="date" id="deadDate" class="input-dark flex-1"><input type="number" id="deadKm" placeholder="Km limite" class="input-dark flex-1"></div>
                             <button onclick="addDeadline()" class="btn-orange text-[10px] py-2">Salva</button>
                         </div>
@@ -200,88 +109,97 @@
                             if(d.date) { const diff = Math.ceil((new Date(d.date) - new Date()) / 86400000); results.push(diff > 0 ? `${diff} gg` : "Scaduto!"); }
                             if(d.km) { const diffKm = d.km - lastEntry.km; results.push(diffKm > 0 ? `${diffKm.toLocaleString()} km` : "Soglia!"); }
                             const statusStr = results.join(' / ');
-                            return `<div class="flex justify-between items-center bg-[#16161c]/50 p-3 rounded-lg border border-gray-800/30"><div><p class="text-sm font-bold text-white">${d.title}</p></div><div class="flex items-center gap-2"><span class="badge-deadline ${statusStr.includes('Scaduto') || statusStr.includes('Soglia') ? 'bg-red-900/30 text-red-500' : 'bg-orange-900/30 text-orange-500'}">${statusStr}</span><button onclick="delDeadline(${i})" class="text-gray-700"><i class="bi bi-trash"></i></button></div></div>`;
-                        }).join('') || '<p class="text-gray-600 text-[10px] text-center italic uppercase">Nessuna scadenza</p>'}</div>
-                    </div>`;
-                if(sortedData.length > 0) setTimeout(() => renderChart(sortedData), 50);
+                            return `<div class="flex justify-between items-center bg-[#16161c]/50 p-3 rounded-lg border border-gray-800/30"><div><p class="text-sm font-bold text-white">${d.title}</p></div><div class="flex items-center gap-2"><span class="badge-deadline ${statusStr.includes('Scaduto') || statusStr.includes('Soglia') ? 'bg-red-900/30 text-red-500' : 'bg-orange-900/30 text-orange-500'}">${statusStr}</span><button onclick="delDeadline(${i})" class="text-gray-700"><i class="bi bi-x-circle"></i></button></div></div>`;
+                        }).join('') || '<p class="text-gray-600 text-[10px] text-center py-2 italic tracking-widest uppercase">Tutto Sotto Controllo</p>'}</div>
+                    </div>
+                `;
+                if(sortedData.length > 0) { setTimeout(() => renderChart(sortedData), 100); }
             }
 
             if (tab === 'km') {
                 const logs = [...v.kmLogs].sort((a,b) => new Date(b.d) - new Date(a.d));
-                cont.innerHTML = `
-                    <div class="card p-5 space-y-4">
-                        <h3 class="font-bold text-xs text-orange-500 uppercase">Registra Km</h3>
-                        <div class="flex gap-2"><input type="date" id="kDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="kVal" placeholder="Km" class="input-dark flex-1"></div>
-                        <input type="text" id="kDesc" placeholder="Nota opzionale" class="input-dark">
-                        <button onclick="addKm()" class="btn-orange text-sm">Salva</button>
-                    </div>
-                    <div class="space-y-2">${logs.map((l, i) => `<div class="card p-3 flex justify-between"><div><p class="font-bold">${parseInt(l.v).toLocaleString()} km</p><p class="text-[10px] text-gray-500">${l.d}</p></div><button onclick="delKm(${i})" class="text-gray-600"><i class="bi bi-trash"></i></button></div>`).join('')}</div>`;
+                cont.innerHTML = `<div class="card p-5 space-y-4"><h3 class="font-bold text-xs text-orange-500 uppercase">Nuova Lettura</h3><input type="date" id="kDate" class="input-dark" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="kVal" placeholder="Km totali" class="input-dark"><button onclick="addKm()" class="btn-orange text-sm">Registra</button></div><div class="card p-5"><h3 class="text-[10px] font-bold uppercase text-gray-500 mb-4 tracking-widest">Storico</h3><div class="divide-y divide-gray-800">${logs.map((l, i) => `<div class="flex justify-between items-center py-3"><div><p class="text-white font-bold">${parseInt(l.v).toLocaleString()} km</p><p class="text-[10px] text-gray-500">${l.d.split('-').reverse().join('/')}</p></div><button onclick="delKm(${i})" class="text-gray-700"><i class="bi bi-trash"></i></button></div>`).join('') || '<p class="text-gray-600 text-xs italic">Nessun dato.</p>'}</div></div>`;
             }
 
             if (tab === 'maint') {
                 const logs = [...v.maint].sort((a,b) => new Date(b.d_raw) - new Date(a.d_raw));
-                cont.innerHTML = `
-                    <div class="card p-5 space-y-4">
-                        <h3 class="font-bold text-xs text-orange-500 uppercase">Intervento Officina</h3>
-                        <select id="mType" class="input-dark"><option>Tagliando</option><option>Revisione</option><option>Cambio Gomme</option><option>Inversione Gomme</option><option>Ricambi</option><option>Altro</option></select>
-                        <div class="flex gap-2"><input type="date" id="mDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="mKm" placeholder="Km" class="input-dark flex-1"></div>
-                        <textarea id="mDesc" placeholder="Dettagli..." class="input-dark h-20"></textarea>
-                        <button onclick="addM()" class="btn-orange text-sm">Registra</button>
-                    </div>
-                    <div class="space-y-3">${logs.map((m, i) => `
-                        <div class="card p-4">
-                            <div class="flex justify-between">
-                                <div class="flex gap-3"><i class="bi ${iconMap[m.t] || 'bi-gear'} text-orange-500"></i><div><p class="font-bold text-sm">${m.t}</p><p class="text-[10px] text-gray-400">${m.k.toLocaleString()} km • ${m.d}</p></div></div>
-                                <button onclick="delM(${i})" class="text-gray-700"><i class="bi bi-trash"></i></button>
-                            </div>
-                            ${m.desc ? `<p class="mt-2 text-[11px] text-gray-500 border-t border-gray-800 pt-2">${m.desc}</p>` : ''}
-                        </div>`).join('')}</div>`;
+                cont.innerHTML = `<div class="card p-5 space-y-4 mb-4"><h3 class="font-bold text-xs text-orange-500 uppercase">Nuovo Intervento</h3>
+                    <select id="mType" class="input-dark"><option>Tagliando</option><option>Revisione</option><option>Cambio Gomme</option><option>Inversione Gomme</option><option>Ricambi</option><option>Altro</option></select>
+                    <div class="flex gap-2"><input type="date" id="mDate" class="input-dark flex-1" value="${new Date().toISOString().split('T')[0]}"><input type="number" id="mKm" placeholder="Km" class="input-dark flex-1"></div>
+                    <textarea id="mDesc" placeholder="Descrizione lavori (es. marca olio, pezzi cambiati...)" class="input-dark h-20"></textarea>
+                    <button onclick="addM()" class="btn-orange text-sm">Salva Intervento</button></div>
+                    <div class="card p-5"><h3 class="text-[10px] font-bold uppercase text-gray-500 mb-4 tracking-widest">Officina</h3><div class="space-y-3">${logs.map((m, i) => `
+                    <div class="bg-[#16161c] p-3 rounded-xl border border-gray-800">
+                        <div class="flex justify-between items-start">
+                            <div><p class="text-orange-500 font-bold text-sm">${m.t}</p><p class="text-[10px] text-white">${m.k.toLocaleString()} km • ${m.d}</p></div>
+                            <button onclick="delM(${i})" class="text-gray-700"><i class="bi bi-trash"></i></button>
+                        </div>
+                        ${m.desc ? `<p class="mt-2 text-[11px] text-gray-400 border-t border-gray-800 pt-2 font-light leading-relaxed">${m.desc}</p>` : ''}
+                    </div>`).join('') || '<p class="text-gray-600 text-xs italic">Nessun dato.</p>'}</div></div>`;
             }
 
             if (tab === 'settings') {
                 cont.innerHTML = `
-                    <div class="card p-5 space-y-4">
-                        <h3 class="font-bold text-orange-500 uppercase text-xs">Gestione Mezzi</h3>
-                        <select id="vTipo" class="input-dark"><option value="auto">Auto</option><option value="moto">Moto</option></select>
-                        <div class="grid grid-cols-2 gap-2"><input type="text" id="vMarca" placeholder="Marca" class="input-dark"><input type="text" id="vMod" placeholder="Modello" class="input-dark"></div>
-                        <div class="grid grid-cols-2 gap-2"><input type="text" id="vTargaInput" placeholder="Targa" class="input-dark"><input type="number" id="vAnnoInput" placeholder="Anno" class="input-dark"></div>
-                        <button onclick="saveVehicle()" id="btnSaveV" class="btn-orange text-sm">Salva Veicolo</button>
-                    </div>
-                    <div class="space-y-3">${db.vehicles.map(veh => `
-                        <div class="card p-4 flex justify-between items-center">
-                            <div><p class="font-bold text-sm">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</p><p class="text-[10px] text-gray-500">${veh.targa}</p></div>
-                            <div class="flex gap-4"><button onclick="editVehicle(${veh.id})" class="text-orange-500"><i class="bi bi-pencil-square"></i></button><button onclick="deleteVehicle(${veh.id})" class="text-red-900/60"><i class="bi bi-trash3"></i></button></div>
-                        </div>`).join('')}</div>`;
+                <div class="card p-5 space-y-4"><h3 class="font-bold text-orange-500 uppercase text-xs" id="formTitle">Gestione Veicolo</h3><select id="vTipo" class="input-dark"><option value="auto">Auto</option><option value="moto">Moto</option></select><div class="grid grid-cols-2 gap-2"><input type="text" id="vMarca" placeholder="Marca" class="input-dark"><input type="text" id="vMod" placeholder="Modello" class="input-dark"></div><div class="grid grid-cols-2 gap-2"><input type="text" id="vTargaInput" placeholder="Targa" class="input-dark"><input type="number" id="vAnnoInput" placeholder="Anno" class="input-dark"></div><button onclick="saveVehicle()" id="btnSaveV" class="btn-orange">Salva</button><button onclick="cancelEdit()" id="btnCancelEdit" class="hidden text-xs text-gray-500 w-full text-center py-2">Annulla</button></div>
+                <div class="card p-5 space-y-4"><h3 class="font-bold text-gray-500 uppercase text-[10px] tracking-widest">Backup Dati</h3><div class="flex gap-2"><button onclick="exportData()" class="flex-1 bg-[#16161c] border border-gray-800 py-3 rounded-xl text-[10px] uppercase font-bold text-gray-400">Esporta</button><label class="flex-1 bg-[#16161c] border border-gray-800 py-3 rounded-xl text-[10px] uppercase font-bold text-gray-400 text-center cursor-pointer">Importa<input type="file" class="hidden" onchange="importData(event)"></label></div></div>
+                <div class="space-y-3 mt-4">${db.vehicles.map(veh => `<div class="card p-4 flex justify-between items-center"><div><p class="font-bold text-white text-sm">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</p><p class="text-[10px] text-gray-500">${veh.targa}</p></div><div class="flex gap-4"><button onclick="editVehicle(${veh.id})" class="text-orange-500"><i class="bi bi-pencil-square"></i></button><button onclick="deleteVehicle(${veh.id})" class="text-red-900/60"><i class="bi bi-trash3"></i></button></div></div>`).join('')}</div>`;
             }
         }
 
         function renderChart(dataPoints) {
             const ctx = document.getElementById('chart'); if(!ctx) return;
-            new Chart(ctx, { type: 'line', data: { datasets: [{ data: dataPoints.map(p => ({ x: p.date.getTime(), y: p.km })), borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.05)', tension: 0.3, fill: true }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 9 } } }, x: { type: 'linear', grid: { display: false }, ticks: { color: '#6b7280', font: { size: 8 }, callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) } } } } });
+            const chartData = dataPoints.map(p => ({ x: p.date.getTime(), y: p.km }));
+            const minX = chartData[0].x; const maxX = chartData[chartData.length - 1].x;
+            new Chart(ctx, { 
+                type: 'line', 
+                data: { datasets: [{ data: chartData, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.05)', tension: 0.2, fill: true, pointRadius: 4, pointBackgroundColor: '#f97316', borderWidth: 2 }] }, 
+                options: { 
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }, 
+                    layout: { padding: { left: 0, right: 0, bottom: 0 } }, 
+                    scales: { 
+                        y: { position: 'right', grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 9 } } }, 
+                        x: { 
+                            type: 'linear', min: minX, max: maxX, grid: { display: false }, 
+                            ticks: { 
+                                color: '#6b7280', font: { size: 9 }, 
+                                autoSkip: true, maxTicksLimit: 5, minTicksLimit: 5, maxRotation: 0,
+                                callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) 
+                            } 
+                        } 
+                    } 
+                } 
+            });
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            const dl = document.createElement('a'); dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", `veicoli_backup_${new Date().toISOString().split('T')[0]}.json`); dl.click();
+        }
+
+        function importData(e) {
+            const reader = new FileReader(); reader.onload = (ev) => {
+                try { const imp = JSON.parse(ev.target.result); if(imp.vehicles) { db = imp; save(); updateHeader(); render('settings'); alert("Fatto!"); } } catch(err) { alert("Errore file"); }
+            }; reader.readAsText(e.target.files[0]);
         }
 
         function saveVehicle() { const t = document.getElementById('vTipo').value, ma = document.getElementById('vMarca').value, mo = document.getElementById('vMod').value, ta = document.getElementById('vTargaInput').value, an = document.getElementById('vAnnoInput').value; if(!ma || !mo) return; if (editingId) { Object.assign(db.vehicles.find(x => x.id === editingId), { tipo:t, marca:ma, modello:mo, targa:ta, anno:an }); editingId = null; } else { const id = Date.now(); db.vehicles.push({ id, tipo:t, marca:ma, modello:mo, targa:ta, anno:an, kmLogs: [], maint: [], deadlines: [] }); db.activeId = id; } save(); updateHeader(); render('settings'); }
+        function editVehicle(id) { const v = db.vehicles.find(x => x.id === id); editingId = id; render('settings'); document.getElementById('vTipo').value = v.tipo; document.getElementById('vMarca').value = v.marca; document.getElementById('vMod').value = v.modello; document.getElementById('vTargaInput').value = v.targa; document.getElementById('vAnnoInput').value = v.anno; document.getElementById('btnCancelEdit').classList.remove('hidden'); }
         function deleteVehicle(id) { if(confirm("Eliminare?")) { db.vehicles = db.vehicles.filter(x => x.id !== id); if(db.activeId === id) db.activeId = db.vehicles.length ? db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
         function updateHeader() { const v = db.vehicles.find(x => x.id === db.activeId); if(v) { document.getElementById('vName').innerText = `${v.marca} ${v.modello}`; document.getElementById('vTarga').innerText = v.targa || '------'; document.getElementById('vAnno').innerText = v.anno || '----'; document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl'; } document.getElementById('vMenu').innerHTML = db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join(''); }
-        function addKm() { const v = db.vehicles.find(x => x.id === db.activeId); const val = document.getElementById('kVal').value, date = document.getElementById('kDate').value, desc = document.getElementById('kDesc').value; if(!val || !v) return; v.kmLogs.push({ d: date, v: parseInt(val), desc }); save(); switchTab('dashboard'); }
+        function addKm() { const v = db.vehicles.find(x => x.id === db.activeId); const val = document.getElementById('kVal').value, date = document.getElementById('kDate').value; if(!val || !v) return; v.kmLogs.push({ d: date, v: parseInt(val) }); save(); switchTab('dashboard'); }
         function addM() { const v = db.vehicles.find(x => x.id === db.activeId); const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; if(!k || !v) return; v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); save(); switchTab('dashboard'); }
         function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value, date = document.getElementById('deadDate').value, km = document.getElementById('deadKm').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date, km: km ? parseInt(km) : null }); save(); render('dashboard'); }
         function delKm(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
         function delM(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.maint.splice(i, 1); save(); render('maint'); }
         function delDeadline(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.deadlines.splice(i, 1); save(); render('dashboard'); }
         function showDeadlineForm() { document.getElementById('deadlineForm').classList.toggle('hidden'); }
-        function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); render('dashboard'); }
-
-        // Service Worker Registration
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').then(reg => console.log('SW ok'), err => console.log('SW no', err));
-            });
-        }
+        function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
+        function cancelEdit() { editingId = null; render('settings'); }
 
         updateHeader();
         switchTab('dashboard');
-        loadFromCloud();
     </script>
 </body>
 </html>
