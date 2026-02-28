@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Car & Moto Tracker Pro Cloud</title>
+    <title>Car & Moto Tracker Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -20,28 +20,37 @@
         .vehicle-dropdown.show { display: block; }
         .v-opt { padding: 1rem; border-bottom: 1px solid #2a2a32; color: #9ca3af; cursor: pointer; }
         .badge-deadline { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 0.5rem; font-weight: bold; }
+        /* Modal Style */
+        #cloudModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; align-items: center; justify-content: center; padding: 1.5rem; backdrop-filter: blur(4px); }
+        #cloudModal.show { display: flex; }
     </style>
 </head>
 <body class="pb-10">
 
     <div id="app" class="max-w-md mx-auto">
         <header class="bg-[#0f0f13] border-b border-gray-800/50 sticky top-0 z-50">
-            <div class="p-4 flex items-center justify-between cursor-pointer" onclick="toggleMenu()">
-                <div class="flex items-center gap-3">
+            <div class="flex items-center justify-between px-2">
+                
+                <div class="flex-1 p-4 flex items-center gap-3 cursor-pointer" onclick="toggleMenu()">
                     <div class="bg-[#1e1e24] p-2.5 rounded-xl border border-gray-800 shadow-lg">
                         <i id="headerIcon" class="bi bi-car-front-fill text-orange-500 text-xl"></i>
                     </div>
                     <div class="flex flex-col">
-                        <span id="vName" class="text-lg font-black text-white uppercase leading-none tracking-tight">Caricamento...</span>
+                        <span id="vName" class="text-lg font-black text-white uppercase leading-none tracking-tight">Nessun Mezzo</span>
                         <div class="flex items-center gap-1.5 mt-1">
                             <span id="vTarga" class="text-[10px] text-gray-400 font-mono font-bold">------</span>
                             <span class="text-gray-600 text-[10px]">•</span>
                             <span id="vAnno" class="text-[10px] text-gray-400 font-bold">----</span>
                         </div>
                     </div>
-                    <i class="bi bi-chevron-down text-orange-500 text-xs ml-auto"></i>
+                    <i class="bi bi-chevron-down text-orange-500 text-xs ml-1"></i>
                 </div>
+
+                <button onclick="toggleCloudModal()" class="p-4 text-gray-500 hover:text-orange-500 transition-colors">
+                    <i class="bi bi-three-dots-vertical text-xl"></i>
+                </button>
             </div>
+
             <div id="vMenu" class="vehicle-dropdown shadow-2xl"></div>
 
             <nav class="flex justify-around border-t border-gray-800/30">
@@ -55,62 +64,106 @@
         <div id="content" class="p-4 space-y-4 pb-20"></div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+    <div id="cloudModal">
+        <div class="card p-6 w-full max-w-xs space-y-4 shadow-2xl">
+            <div class="text-center">
+                <i class="bi bi-cloud-arrow-up text-3xl text-orange-500 mb-2 block"></i>
+                <h3 class="font-bold text-white uppercase text-sm">Sincronizzazione Cloud</h3>
+                <p class="text-[10px] text-gray-500 mt-1">Inserisci le tue credenziali JSONBin.io</p>
+            </div>
+            <div class="space-y-2">
+                <input type="password" id="jsbKey" placeholder="Master Key ($2b$...)" class="input-dark">
+                <input type="text" id="jsbId" placeholder="Bin ID" class="input-dark">
+            </div>
+            <button onclick="saveCloudConfig()" class="btn-orange text-xs py-3">Collega e Sincronizza</button>
+            <button onclick="toggleCloudModal()" class="text-xs text-gray-400 w-full text-center py-2">Chiudi</button>
+        </div>
+    </div>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyAL4DrFQdOOwjNeNADv1aO4uAa5Lz1AD9s",
-            authDomain: "autoregistro-bc770.firebaseapp.com",
-            projectId: "autoregistro-bc770",
-            storageBucket: "autoregistro-bc770.firebasestorage.app",
-            messagingSenderId: "503626529752",
-            appId: "1:503626529752:web:90f84ddead5faf2385d0ad"
+    <script>
+        let db = JSON.parse(localStorage.getItem('carTrackerDB_v4')) || { activeId: null, vehicles: [] };
+        let cloudConfig = JSON.parse(localStorage.getItem('carTrackerCloud')) || { key: '', id: '' };
+        let editingId = null;
+
+        // --- CLOUD LOGIC ---
+        async function save() { 
+            localStorage.setItem('carTrackerDB_v4', JSON.stringify(db)); 
+            if (cloudConfig.key && cloudConfig.id) {
+                await syncToCloud();
+            }
+        }
+
+        async function syncToCloud() {
+            try {
+                const res = await fetch(`https://api.jsonbin.io/v3/b/${cloudConfig.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Master-Key': cloudConfig.key },
+                    body: JSON.stringify(db)
+                });
+                if(res.ok) console.log("Cloud synced successfully");
+            } catch (e) { console.error("Cloud error", e); }
+        }
+
+        async function loadFromCloud() {
+            if (!cloudConfig.key || !cloudConfig.id) return;
+            try {
+                const res = await fetch(`https://api.jsonbin.io/v3/b/${cloudConfig.id}/latest`, {
+                    headers: { 'X-Master-Key': cloudConfig.key }
+                });
+                const remote = await res.json();
+                if (remote.record) {
+                    db = remote.record;
+                    localStorage.setItem('carTrackerDB_v4', JSON.stringify(db));
+                    updateHeader();
+                    render(document.querySelector('.nav-top-item.active').id.replace('t-',''));
+                }
+            } catch (e) { console.error("Cloud load error", e); }
+        }
+
+        function toggleCloudModal() { 
+            document.getElementById('cloudModal').classList.toggle('show');
+            document.getElementById('jsbKey').value = cloudConfig.key;
+            document.getElementById('jsbId').value = cloudConfig.id;
+        }
+
+        function saveCloudConfig() {
+            cloudConfig.key = document.getElementById('jsbKey').value;
+            cloudConfig.id = document.getElementById('jsbId').value;
+            localStorage.setItem('carTrackerCloud', JSON.stringify(cloudConfig));
+            loadFromCloud().then(() => {
+                toggleCloudModal();
+                alert("Configurazione salvata e dati aggiornati!");
+            });
+        }
+
+        // --- APP LOGIC ---
+        function toggleMenu() { document.getElementById('vMenu').classList.toggle('show'); }
+
+        const iconMap = {
+            'Tagliando': 'bi-wrench-adjustable',
+            'Revisione': 'bi-calendar-check',
+            'Cambio Gomme': 'bi-disc',
+            'Inversione Gomme': 'bi-arrow-repeat',
+            'Ricambi': 'bi-box-seam',
+            'Altro': 'bi-gear'
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db_cloud = getFirestore(app);
-        const USER_ID = "default_user"; // Puoi cambiarlo per separare i garage
-
-        // Variabili Globali
-        window.db = JSON.parse(localStorage.getItem('carTrackerDB_v4')) || { activeId: null, vehicles: [] };
-        window.editingId = null;
-
-        // --- FUNZIONI CORE ---
-        window.save = async function() {
-            localStorage.setItem('carTrackerDB_v4', JSON.stringify(window.db));
-            try {
-                await setDoc(doc(db_cloud, "garages", USER_ID), window.db);
-                console.log("Cloud Sync: OK");
-            } catch (e) { console.error("Cloud Sync: Error", e); }
+        function getAllKmSorted(v) {
+            let combined = [];
+            v.kmLogs.forEach(l => combined.push({ date: new Date(l.d), km: parseInt(l.v), label: l.d }));
+            v.maint.forEach(m => { if(m.k) combined.push({ date: new Date(m.d_raw), km: parseInt(m.k), label: m.d_raw }); });
+            return combined.sort((a, b) => a.date - b.date);
         }
 
-        window.loadFromCloud = async function() {
-            const docRef = doc(db_cloud, "garages", USER_ID);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                window.db = docSnap.data();
-                localStorage.setItem('carTrackerDB_v4', JSON.stringify(window.db));
-                console.log("Dati caricati dal Cloud");
-            }
-            updateHeader();
-            render('dashboard');
-        }
-
-        // --- UI & NAVIGATION ---
-        const iconMap = { 'Tagliando': 'bi-wrench-adjustable', 'Revisione': 'bi-calendar-check', 'Cambio Gomme': 'bi-disc', 'Inversione Gomme': 'bi-arrow-repeat', 'Ricambi': 'bi-box-seam', 'Altro': 'bi-gear' };
-
-        window.toggleMenu = () => document.getElementById('vMenu').classList.toggle('show');
-        
-        window.switchTab = (tab) => {
+        function switchTab(tab) {
             document.querySelectorAll('.nav-top-item').forEach(el => el.classList.remove('active'));
             document.getElementById(`t-${tab}`).classList.add('active');
             render(tab);
         }
 
-        window.render = function(tab) {
+        function render(tab) {
             const cont = document.getElementById('content');
-            const v = window.db.vehicles.find(x => x.id === window.db.activeId);
+            const v = db.vehicles.find(x => x.id === db.activeId);
             
             if (!v && tab !== 'settings') {
                 cont.innerHTML = `<div class="card p-10 text-center border-dashed"><i class="bi bi-plus-lg text-orange-500 text-4xl mb-4 block"></i><p class="text-gray-400 text-sm">Configura il tuo mezzo nella scheda <b>Mezzi</b>.</p></div>`;
@@ -225,8 +278,20 @@
                         <button onclick="saveVehicle()" id="btnSaveV" class="btn-orange text-sm">Salva Veicolo</button>
                         <button onclick="cancelEdit()" id="btnCancelEdit" class="hidden text-xs text-gray-500 w-full text-center py-2">Annulla Modifica</button>
                     </div>
+
+                    <div class="card p-5 space-y-4">
+                        <h3 class="font-bold text-gray-500 uppercase text-xs tracking-widest">Dati & Backup Locali</h3>
+                        <div class="flex gap-2">
+                            <button onclick="exportData()" class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-download mr-2"></i>Esporta</button>
+                            <label class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase text-center cursor-pointer">
+                                <i class="bi bi-upload mr-2"></i>Importa
+                                <input type="file" class="hidden" onchange="importData(event)">
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="space-y-3 mt-6">
-                        ${window.db.vehicles.map(veh => `
+                        ${db.vehicles.map(veh => `
                             <div class="card p-4 flex justify-between items-center border-gray-800/50">
                                 <div><p class="font-bold text-white text-sm">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</p><p class="text-[10px] text-gray-500 font-mono">${veh.targa} • ${veh.anno}</p></div>
                                 <div class="flex gap-4"><button onclick="editVehicle(${veh.id})" class="text-orange-500 text-lg"><i class="bi bi-pencil-square"></i></button><button onclick="deleteVehicle(${veh.id})" class="text-red-900/60 text-lg"><i class="bi bi-trash3"></i></button></div>
@@ -237,94 +302,93 @@
             }
         }
 
-        // --- HELPER FUNCTIONS ---
-        window.getAllKmSorted = (v) => {
-            let combined = [];
-            v.kmLogs.forEach(l => combined.push({ date: new Date(l.d), km: parseInt(l.v), label: l.d }));
-            v.maint.forEach(m => { if(m.k) combined.push({ date: new Date(m.d_raw), km: parseInt(m.k), label: m.d_raw }); });
-            return combined.sort((a, b) => a.date - b.date);
-        }
-
-        window.updateHeader = () => {
-            const v = window.db.vehicles.find(x => x.id === window.db.activeId);
-            if(v) {
-                document.getElementById('vName').innerText = `${v.marca} ${v.modello}`;
-                document.getElementById('vTarga').innerText = v.targa || '------';
-                document.getElementById('vAnno').innerText = v.anno || '----';
-                document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl';
-            } else {
-                document.getElementById('vName').innerText = "Nessun Mezzo";
-            }
-            document.getElementById('vMenu').innerHTML = window.db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join('');
-        }
-
-        window.renderChart = (dataPoints) => {
+        function renderChart(dataPoints) {
             const ctx = document.getElementById('chart'); if(!ctx) return;
             const chartData = dataPoints.map(p => ({ x: p.date.getTime(), y: p.km }));
+            const minX = chartData[0].x; const maxX = chartData[chartData.length - 1].x;
             new Chart(ctx, { 
                 type: 'line', 
                 data: { datasets: [{ data: chartData, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.05)', tension: 0.2, fill: true, pointRadius: 4, pointBackgroundColor: '#f97316', borderWidth: 2 }] }, 
                 options: { 
                     responsive: true, 
                     plugins: { legend: { display: false } }, 
+                    layout: { padding: { left: -5, right: 0 } }, 
                     scales: { 
                         y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 10 } } }, 
-                        x: { type: 'linear', grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 }, maxTicksLimit: 5, callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) } } 
+                        x: { 
+                            type: 'linear', 
+                            min: minX, 
+                            max: maxX, 
+                            bounds: 'ticks', 
+                            grid: { display: false }, 
+                            ticks: { 
+                                color: '#6b7280', 
+                                font: { size: 9 }, 
+                                autoSkip: true, 
+                                maxTicksLimit: 5, 
+                                minTicksLimit: 5,
+                                maxRotation: 0,
+                                minRotation: 0,
+                                callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) 
+                            } 
+                        } 
                     } 
                 } 
             });
         }
 
-        // --- AZIONI ---
-        window.saveVehicle = () => { 
-            const t = document.getElementById('vTipo').value, ma = document.getElementById('vMarca').value, mo = document.getElementById('vMod').value, ta = document.getElementById('vTargaInput').value, an = document.getElementById('vAnnoInput').value; 
-            if(!ma || !mo) return; 
-            if (window.editingId) { 
-                Object.assign(window.db.vehicles.find(x => x.id === window.editingId), { tipo:t, marca:ma, modello:mo, targa:ta, anno:an }); 
-                window.editingId = null; 
-            } else { 
-                const id = Date.now(); 
-                window.db.vehicles.push({ id, tipo:t, marca:ma, modello:mo, targa:ta, anno:an, kmLogs: [], maint: [], deadlines: [] }); 
-                window.db.activeId = id; 
-            } 
-            save(); updateHeader(); render('settings'); 
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `tracker_backup_${new Date().toISOString().split('T')[0]}.json`);
+            dlAnchorElem.click();
         }
 
-        window.addKm = () => { 
-            const v = window.db.vehicles.find(x => x.id === window.db.activeId); 
-            const val = document.getElementById('kVal').value, date = document.getElementById('kDate').value, desc = document.getElementById('kDesc').value;
+        function importData(event) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if(imported.vehicles) {
+                        db = imported;
+                        save();
+                        updateHeader();
+                        render('settings');
+                        alert("Dati importati con successo!");
+                    }
+                } catch(err) { alert("File non valido."); }
+            };
+            reader.readAsText(event.target.files[0]);
+        }
+
+        function saveVehicle() { const t = document.getElementById('vTipo').value, ma = document.getElementById('vMarca').value, mo = document.getElementById('vMod').value, ta = document.getElementById('vTargaInput').value, an = document.getElementById('vAnnoInput').value; if(!ma || !mo) return; if (editingId) { Object.assign(db.vehicles.find(x => x.id === editingId), { tipo:t, marca:ma, modello:mo, targa:ta, anno:an }); editingId = null; } else { const id = Date.now(); db.vehicles.push({ id, tipo:t, marca:ma, modello:mo, targa:ta, anno:an, kmLogs: [], maint: [], deadlines: [] }); db.activeId = id; } save(); updateHeader(); render('settings'); }
+        function editVehicle(id) { const v = db.vehicles.find(x => x.id === id); editingId = id; render('settings'); document.getElementById('formTitle').innerText = "Modifica Veicolo"; document.getElementById('vTipo').value = v.tipo; document.getElementById('vMarca').value = v.marca; document.getElementById('vMod').value = v.modello; document.getElementById('vTargaInput').value = v.targa; document.getElementById('vAnnoInput').value = v.anno; document.getElementById('btnSaveV').innerText = "Aggiorna Dati"; document.getElementById('btnCancelEdit').classList.remove('hidden'); }
+        function deleteVehicle(id) { if(confirm("Eliminare?")) { db.vehicles = db.vehicles.filter(x => x.id !== id); if(db.activeId === id) db.activeId = db.vehicles.length ? db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
+        function updateHeader() { const v = db.vehicles.find(x => x.id === db.activeId); if(v) { document.getElementById('vName').innerText = `${v.marca} ${v.modello}`; document.getElementById('vTarga').innerText = v.targa || '------'; document.getElementById('vAnno').innerText = v.anno || '----'; document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl'; } document.getElementById('vMenu').innerHTML = db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join(''); }
+        function addKm() { 
+            const v = db.vehicles.find(x => x.id === db.activeId); 
+            const val = document.getElementById('kVal').value; 
+            const date = document.getElementById('kDate').value; 
+            const desc = document.getElementById('kDesc').value;
             if(!val || !v) return; 
             v.kmLogs.push({ d: date, v: parseInt(val), desc: desc }); 
-            save(); switchTab('dashboard'); 
+            save(); 
+            switchTab('dashboard'); 
         }
+        function addM() { const v = db.vehicles.find(x => x.id === db.activeId); const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; if(!k || !v) return; v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); save(); switchTab('dashboard'); }
+        function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value, date = document.getElementById('deadDate').value, km = document.getElementById('deadKm').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date, km: km ? parseInt(km) : null }); save(); render('dashboard'); }
+        function delKm(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
+        function delM(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.maint.splice(i, 1); save(); render('maint'); }
+        function delDeadline(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.deadlines.splice(i, 1); save(); render('dashboard'); }
+        function showDeadlineForm() { document.getElementById('deadlineForm').classList.toggle('hidden'); }
+        function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
+        function cancelEdit() { editingId = null; render('settings'); }
 
-        window.addM = () => { 
-            const v = window.db.vehicles.find(x => x.id === window.db.activeId); 
-            const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; 
-            if(!k || !v) return; 
-            v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); 
-            save(); switchTab('dashboard'); 
-        }
-
-        window.addDeadline = () => { 
-            const v = window.db.vehicles.find(x => x.id === window.db.activeId); 
-            const title = document.getElementById('deadTitle').value, date = document.getElementById('deadDate').value, km = document.getElementById('deadKm').value; 
-            if(!v || !title) return; 
-            if(!v.deadlines) v.deadlines = []; 
-            v.deadlines.push({ title, date, km: km ? parseInt(km) : null }); 
-            save(); render('dashboard'); 
-        }
-
-        window.deleteVehicle = (id) => { if(confirm("Eliminare?")) { window.db.vehicles = window.db.vehicles.filter(x => x.id !== id); if(window.db.activeId === id) window.db.activeId = window.db.vehicles.length ? window.db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
-        window.selV = (id) => { window.db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
-        window.showDeadlineForm = () => document.getElementById('deadlineForm').classList.toggle('hidden');
-        window.delKm = (i) => { const v = window.db.vehicles.find(x => x.id === window.db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
-        window.delM = (i) => { const v = window.db.vehicles.find(x => x.id === window.db.activeId); v.maint.splice(i, 1); save(); render('maint'); }
-        window.delDeadline = (i) => { const v = window.db.vehicles.find(x => x.id === window.db.activeId); v.deadlines.splice(i, 1); save(); render('dashboard'); }
-
-        // Inizializzazione
-        window.loadFromCloud();
-
+        // --- INIT ---
+        updateHeader();
+        switchTab('dashboard');
+        loadFromCloud();
     </script>
 </body>
 </html>
