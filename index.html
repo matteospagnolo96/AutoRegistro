@@ -62,38 +62,42 @@
 
         function save() { 
             localStorage.setItem('carTrackerDB_v4', JSON.stringify(db));
-            // Sincronizzazione automatica silenziosa al salvataggio
             syncToCloud(true);
         }
 
         async function syncToCloud(silent = false) {
             try {
+                // Usiamo fetch con redirect manuale per Apps Script
                 await fetch(SYNC_URL, {
                     method: 'POST',
                     mode: 'no-cors',
+                    cache: 'no-cache',
                     body: JSON.stringify(db)
                 });
-                if(!silent) alert("Dati salvati su Google Drive!");
+                if(!silent) alert("Dati inviati a Google Drive!");
             } catch (e) {
-                if(!silent) alert("Errore Cloud: " + e);
+                if(!silent) alert("Errore invio: " + e);
             }
         }
 
         async function loadFromCloud() {
-            if(!confirm("Vuoi sovrascrivere i dati attuali con quelli salvati su Google Drive?")) return;
+            if(!confirm("Vuoi sovrascrivere i dati locali con il backup su Drive?")) return;
             try {
+                // Apps Script richiede di seguire i redirect per il GET
                 const response = await fetch(SYNC_URL);
                 const cloudData = await response.json();
+                
                 if(cloudData && cloudData.vehicles) {
                     db = cloudData;
                     localStorage.setItem('carTrackerDB_v4', JSON.stringify(db));
-                    alert("Dati recuperati con successo!");
+                    alert("✅ Dati recuperati correttamente!");
                     location.reload();
                 } else {
-                    alert("Nessun dato valido trovato nel Cloud.");
+                    alert("⚠️ Nessun dato trovato o formato non valido.");
                 }
             } catch (e) {
-                alert("Errore nel recupero dati: " + e);
+                console.error(e);
+                alert("❌ Errore durante il recupero. Assicurati di aver aggiornato lo script su Google e fatto una 'Nuova Distribuzione'.");
             }
         }
 
