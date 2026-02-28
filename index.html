@@ -59,15 +59,19 @@
     </div>
 
     <script>
-        // DB Esteso con sezione Cloud
+        // DB con timestamp per sincronizzazione intelligente
         let db = JSON.parse(localStorage.getItem('carTrackerDB_v4')) || { 
             activeId: null, 
             vehicles: [],
+            lastUpdated: 0,
             cloud: { key: '', bin: '' } 
         };
-        let editingId = null;
 
-        function save() { localStorage.setItem('carTrackerDB_v4', JSON.stringify(db)); }
+        function save() { 
+            db.lastUpdated = Date.now(); 
+            localStorage.setItem('carTrackerDB_v4', JSON.stringify(db)); 
+        }
+
         function toggleMenu() { document.getElementById('vMenu').classList.toggle('show'); }
 
         const iconMap = {
@@ -79,43 +83,42 @@
             'Altro': 'bi-gear'
         };
 
-        // --- FUNZIONI SINCRONIZZAZIONE JSONBIN ---
-        async function syncCloud(mode) {
-            if (!db.cloud || !db.cloud.key || !db.cloud.bin) {
-                alert("Configura API Key e Bin ID nella sezione Mezzi");
-                return;
-            }
+        // --- FUNZIONE SINCRONIZZAZIONE INTELLIGENTE ---
+        async function smartSync() {
+            if (!db.cloud?.key || !db.cloud?.bin) return alert("Configura i dati Cloud prima.");
             const btn = event.target;
-            const originalText = btn.innerText;
-            btn.innerText = "ATTENDI...";
-            
+            btn.innerText = "SINCRONIZZAZIONE...";
+
             try {
-                if (mode === 'push') {
-                    const res = await fetch(`https://api.jsonbin.io/v3/b/${db.cloud.bin}`, {
+                // 1. Scarica i dati dal cloud per il confronto
+                const res = await fetch(`https://api.jsonbin.io/v3/b/${db.cloud.bin}/latest`, {
+                    headers: { 'X-Master-Key': db.cloud.key }
+                });
+                const onlineData = (await res.json()).record;
+
+                // 2. Logica di confronto
+                if (!onlineData.lastUpdated || db.lastUpdated > onlineData.lastUpdated) {
+                    // I dati locali sono più nuovi -> Carica (Push)
+                    await fetch(`https://api.jsonbin.io/v3/b/${db.cloud.bin}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json', 'X-Master-Key': db.cloud.key },
                         body: JSON.stringify(db)
                     });
-                    if(res.ok) alert("Dati salvati online!");
-                    else alert("Errore durante il caricamento.");
+                    alert("Cloud aggiornato con i tuoi ultimi dati!");
+                } else if (onlineData.lastUpdated > db.lastUpdated) {
+                    // I dati online sono più nuovi -> Scarica (Pull)
+                    db = onlineData;
+                    localStorage.setItem('carTrackerDB_v4', JSON.stringify(db));
+                    updateHeader();
+                    render('dashboard');
+                    alert("Dati aggiornati dal Cloud!");
                 } else {
-                    const res = await fetch(`https://api.jsonbin.io/v3/b/${db.cloud.bin}/latest`, {
-                        method: 'GET',
-                        headers: { 'X-Master-Key': db.cloud.key }
-                    });
-                    const data = await res.json();
-                    if(data.record) {
-                        db = data.record;
-                        save();
-                        updateHeader();
-                        render('dashboard');
-                        alert("Dati scaricati e aggiornati!");
-                    }
+                    alert("Dati già sincronizzati.");
                 }
             } catch (e) {
-                alert("Errore di connessione al cloud.");
+                alert("Errore di connessione.");
             } finally {
-                btn.innerText = originalText;
+                btn.innerText = "SINCRONIZZA ORA";
             }
         }
 
@@ -241,14 +244,13 @@
 
             if (tab === 'settings') {
                 cont.innerHTML = `
-                    <div class="card p-5 space-y-4 border-orange-500/30">
-                        <h3 class="font-bold text-orange-500 uppercase text-xs">Sincronizzazione Cloud (JSONBin)</h3>
-                        <input type="text" placeholder="Master API Key" class="input-dark" value="${db.cloud?.key || ''}" onchange="db.cloud.key=this.value;save()">
-                        <input type="text" placeholder="Bin ID" class="input-dark" value="${db.cloud?.bin || ''}" onchange="db.cloud.bin=this.value;save()">
-                        <div class="flex gap-2">
-                            <button onclick="syncCloud('push')" class="flex-1 bg-blue-600/20 border border-blue-600/50 text-blue-400 text-[10px] py-3 rounded-xl font-bold uppercase">Carica Online</button>
-                            <button onclick="syncCloud('pull')" class="flex-1 bg-green-600/20 border border-green-600/50 text-green-400 text-[10px] py-3 rounded-xl font-bold uppercase">Scarica Online</button>
+                    <div class="card p-5 space-y-4 border-orange-500">
+                        <h3 class="font-bold text-orange-500 uppercase text-xs">Cloud Sync</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="text" placeholder="API Key" class="input-dark" value="${db.cloud?.key || ''}" onchange="db.cloud.key=this.value;save()">
+                            <input type="text" placeholder="Bin ID" class="input-dark" value="${db.cloud?.bin || ''}" onchange="db.cloud.bin=this.value;save()">
                         </div>
+                        <button onclick="smartSync()" class="btn-orange text-xs">Sincronizza Ora</button>
                     </div>
 
                     <div class="card p-5 space-y-4">
@@ -257,23 +259,11 @@
                         <div class="grid grid-cols-2 gap-2"><input type="text" id="vMarca" placeholder="Marca" class="input-dark"><input type="text" id="vMod" placeholder="Modello" class="input-dark"></div>
                         <div class="grid grid-cols-2 gap-2"><input type="text" id="vTargaInput" placeholder="Targa" class="input-dark"><input type="number" id="vAnnoInput" placeholder="Anno" class="input-dark"></div>
                         <button onclick="saveVehicle()" id="btnSaveV" class="btn-orange text-sm">Salva Veicolo</button>
-                        <button onclick="cancelEdit()" id="btnCancelEdit" class="hidden text-xs text-gray-500 w-full text-center py-2">Annulla Modifica</button>
-                    </div>
-
-                    <div class="card p-5 space-y-4">
-                        <h3 class="font-bold text-gray-500 uppercase text-xs tracking-widest">Backup Manuale</h3>
-                        <div class="flex gap-2">
-                            <button onclick="exportData()" class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-download mr-2"></i>Esporta</button>
-                            <label class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase text-center cursor-pointer">
-                                <i class="bi bi-upload mr-2"></i>Importa
-                                <input type="file" class="hidden" onchange="importData(event)">
-                            </label>
-                        </div>
                     </div>
 
                     <div class="space-y-3 mt-6">
                         ${db.vehicles.map(veh => `
-                            <div class="card p-4 flex justify-between items-center border-gray-800/50">
+                            <div class="card p-4 flex justify-between items-center">
                                 <div><p class="font-bold text-white text-sm">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</p><p class="text-[10px] text-gray-500 font-mono">${veh.targa} • ${veh.anno}</p></div>
                                 <div class="flex gap-4"><button onclick="editVehicle(${veh.id})" class="text-orange-500 text-lg"><i class="bi bi-pencil-square"></i></button><button onclick="deleteVehicle(${veh.id})" class="text-red-900/60 text-lg"><i class="bi bi-trash3"></i></button></div>
                             </div>
@@ -286,85 +276,25 @@
         function renderChart(dataPoints) {
             const ctx = document.getElementById('chart'); if(!ctx) return;
             const chartData = dataPoints.map(p => ({ x: p.date.getTime(), y: p.km }));
-            const minX = chartData[0].x; const maxX = chartData[chartData.length - 1].x;
             new Chart(ctx, { 
                 type: 'line', 
                 data: { datasets: [{ data: chartData, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.05)', tension: 0.2, fill: true, pointRadius: 4, pointBackgroundColor: '#f97316', borderWidth: 2 }] }, 
-                options: { 
-                    responsive: true, 
-                    plugins: { legend: { display: false } }, 
-                    layout: { padding: { left: -5, right: 0 } }, 
-                    scales: { 
-                        y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 10 } } }, 
-                        x: { 
-                            type: 'linear', 
-                            min: minX, 
-                            max: maxX, 
-                            bounds: 'ticks', 
-                            grid: { display: false }, 
-                            ticks: { 
-                                color: '#6b7280', 
-                                font: { size: 9 }, 
-                                autoSkip: true, 
-                                maxTicksLimit: 5, 
-                                minTicksLimit: 5,
-                                maxRotation: 0,
-                                minRotation: 0,
-                                callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) 
-                            } 
-                        } 
-                    } 
-                } 
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 10 } } }, x: { type: 'linear', grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 }, maxTicksLimit: 5, callback: (v) => new Date(v).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }) } } } } 
             });
         }
 
-        function exportData() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
-            const dlAnchorElem = document.createElement('a');
-            dlAnchorElem.setAttribute("href", dataStr);
-            dlAnchorElem.setAttribute("download", `tracker_backup_${new Date().toISOString().split('T')[0]}.json`);
-            dlAnchorElem.click();
-        }
-
-        function importData(event) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const imported = JSON.parse(e.target.result);
-                    if(imported.vehicles) {
-                        db = imported;
-                        save();
-                        updateHeader();
-                        render('settings');
-                        alert("Dati importati con successo!");
-                    }
-                } catch(err) { alert("File non valido."); }
-            };
-            reader.readAsText(event.target.files[0]);
-        }
-
         function saveVehicle() { const t = document.getElementById('vTipo').value, ma = document.getElementById('vMarca').value, mo = document.getElementById('vMod').value, ta = document.getElementById('vTargaInput').value, an = document.getElementById('vAnnoInput').value; if(!ma || !mo) return; if (editingId) { Object.assign(db.vehicles.find(x => x.id === editingId), { tipo:t, marca:ma, modello:mo, targa:ta, anno:an }); editingId = null; } else { const id = Date.now(); db.vehicles.push({ id, tipo:t, marca:ma, modello:mo, targa:ta, anno:an, kmLogs: [], maint: [], deadlines: [] }); db.activeId = id; } save(); updateHeader(); render('settings'); }
-        function editVehicle(id) { const v = db.vehicles.find(x => x.id === id); editingId = id; render('settings'); document.getElementById('formTitle').innerText = "Modifica Veicolo"; document.getElementById('vTipo').value = v.tipo; document.getElementById('vMarca').value = v.marca; document.getElementById('vMod').value = v.modello; document.getElementById('vTargaInput').value = v.targa; document.getElementById('vAnnoInput').value = v.anno; document.getElementById('btnSaveV').innerText = "Aggiorna Dati"; document.getElementById('btnCancelEdit').classList.remove('hidden'); }
+        function editVehicle(id) { const v = db.vehicles.find(x => x.id === id); editingId = id; render('settings'); document.getElementById('formTitle').innerText = "Modifica Veicolo"; document.getElementById('vTipo').value = v.tipo; document.getElementById('vMarca').value = v.marca; document.getElementById('vMod').value = v.modello; document.getElementById('vTargaInput').value = v.targa; document.getElementById('vAnnoInput').value = v.anno; document.getElementById('btnSaveV').innerText = "Aggiorna Dati"; }
         function deleteVehicle(id) { if(confirm("Eliminare?")) { db.vehicles = db.vehicles.filter(x => x.id !== id); if(db.activeId === id) db.activeId = db.vehicles.length ? db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
         function updateHeader() { const v = db.vehicles.find(x => x.id === db.activeId); if(v) { document.getElementById('vName').innerText = `${v.marca} ${v.modello}`; document.getElementById('vTarga').innerText = v.targa || '------'; document.getElementById('vAnno').innerText = v.anno || '----'; document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl'; } document.getElementById('vMenu').innerHTML = db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join(''); }
-        function addKm() { 
-            const v = db.vehicles.find(x => x.id === db.activeId); 
-            const val = document.getElementById('kVal').value; 
-            const date = document.getElementById('kDate').value; 
-            const desc = document.getElementById('kDesc').value;
-            if(!val || !v) return; 
-            v.kmLogs.push({ d: date, v: parseInt(val), desc: desc }); 
-            save(); 
-            switchTab('dashboard'); 
-        }
+        function addKm() { const v = db.vehicles.find(x => x.id === db.activeId); const val = document.getElementById('kVal').value; if(!val || !v) return; v.kmLogs.push({ d: document.getElementById('kDate').value, v: parseInt(val), desc: document.getElementById('kDesc').value }); save(); switchTab('dashboard'); }
         function addM() { const v = db.vehicles.find(x => x.id === db.activeId); const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; if(!k || !v) return; v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); save(); switchTab('dashboard'); }
-        function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value, date = document.getElementById('deadDate').value, km = document.getElementById('deadKm').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date, km: km ? parseInt(km) : null }); save(); render('dashboard'); }
+        function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date: document.getElementById('deadDate').value, km: document.getElementById('deadKm').value ? parseInt(document.getElementById('deadKm').value) : null }); save(); render('dashboard'); }
         function delKm(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
         function delM(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.maint.splice(i, 1); save(); render('maint'); }
         function delDeadline(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.deadlines.splice(i, 1); save(); render('dashboard'); }
         function showDeadlineForm() { document.getElementById('deadlineForm').classList.toggle('hidden'); }
         function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
-        function cancelEdit() { editingId = null; render('settings'); }
 
         updateHeader();
         switchTab('dashboard');
