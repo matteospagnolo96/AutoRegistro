@@ -41,7 +41,7 @@
                         <i id="headerIcon" class="bi bi-car-front-fill text-orange-500 text-xl"></i>
                     </div>
                     <div class="flex flex-col">
-                        <span id="vName" class="text-lg font-black text-white uppercase leading-none tracking-tight">Nessun Mezzo</span>
+                        <span id="vName" class="text-lg font-black text-white uppercase leading-none tracking-tight">Caricamento...</span>
                         <div class="flex items-center gap-1.5 mt-1">
                             <span id="vTarga" class="text-[10px] text-gray-400 font-mono font-bold">------</span>
                             <span class="text-gray-600 text-[10px]">•</span>
@@ -65,7 +65,7 @@
     </div>
 
     <script>
-        let db = JSON.parse(localStorage.getItem('carTrackerDB_v4')) || { activeId: null, vehicles: [] };
+        let db = JSON.parse(localStorage.getItem('carTrackerDB_v4')) || { activeId: null, vehicles: [], cloudKey: '', cloudBin: '' };
         let editingId = null;
 
         function save() { localStorage.setItem('carTrackerDB_v4', JSON.stringify(db)); }
@@ -75,26 +75,17 @@
 
         function getAllKmSorted(v) {
             let combined = [];
-            v.kmLogs.forEach(l => combined.push({ 
-                date: new Date(l.d), 
-                km: parseInt(l.v), 
-                label: l.d,
-                type: l.desc ? `Lettura (${l.desc})` : 'Lettura Km' 
-            }));
-            v.maint.forEach(m => { 
-                if(m.k) combined.push({ 
-                    date: new Date(m.d_raw), 
-                    km: parseInt(m.k), 
-                    label: m.d_raw,
-                    type: m.t 
-                }); 
-            });
+            if(!v.kmLogs) v.kmLogs = [];
+            if(!v.maint) v.maint = [];
+            v.kmLogs.forEach(l => combined.push({ date: new Date(l.d), km: parseInt(l.v), label: l.d, type: l.desc ? `Lettura (${l.desc})` : 'Lettura Km' }));
+            v.maint.forEach(m => { if(m.k) combined.push({ date: new Date(m.d_raw), km: parseInt(m.k), label: m.d_raw, type: m.t }); });
             return combined.sort((a, b) => a.date - b.date);
         }
 
         function switchTab(tab) {
             document.querySelectorAll('.nav-top-item').forEach(el => el.classList.remove('active'));
-            document.getElementById(`t-${tab}`).classList.add('active');
+            const target = document.getElementById(`t-${tab}`);
+            if(target) target.classList.add('active');
             render(tab);
         }
 
@@ -103,7 +94,7 @@
             const v = db.vehicles.find(x => x.id === db.activeId);
             
             if (!v && tab !== 'settings') {
-                cont.innerHTML = `<div class="card p-10 text-center border-dashed"><i class="bi bi-plus-lg text-orange-500 text-4xl mb-4 block"></i><p class="text-gray-400 text-sm">Configura il tuo mezzo nella scheda <b>Mezzi</b>.</p></div>`;
+                cont.innerHTML = `<div class="card p-10 text-center border-dashed"><i class="bi bi-plus-lg text-orange-500 text-4xl mb-4 block"></i><p class="text-gray-400 text-sm">Configura il tuo mezzo nella scheda <b>Mezzi</b> o sincronizza il cloud.</p></div>`;
                 return;
             }
 
@@ -217,7 +208,7 @@
                     </div>
 
                     <div class="card p-5 space-y-4">
-                        <h3 class="font-bold text-gray-500 uppercase text-xs tracking-widest">Dati & Backup</h3>
+                        <h3 class="font-bold text-gray-500 uppercase text-xs tracking-widest">Dati & Cloud</h3>
                         <div class="flex gap-2">
                             <button onclick="exportData()" class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase"><i class="bi bi-download mr-2"></i>Esporta</button>
                             <label class="flex-1 bg-[#16161c] border border-gray-700 text-gray-300 text-[10px] py-3 rounded-xl font-bold uppercase text-center cursor-pointer">
@@ -227,9 +218,12 @@
                         </div>
                         <div class="pt-4 border-t border-gray-800 space-y-3">
                             <h3 class="font-bold text-orange-500 uppercase text-[9px] tracking-widest">Sincronizzazione Cloud</h3>
-                            <input type="text" id="cloudBin" name="username" autocomplete="username" placeholder="Bin ID (Username)" class="input-dark text-xs" value="${db.cloudBin || ''}">
-                            <input type="password" id="cloudKey" name="password" autocomplete="current-password" placeholder="API Key (Password)" class="input-dark text-xs" value="${db.cloudKey || ''}">
-                            <button onclick="syncCloud()" class="w-full bg-orange-500/10 border border-orange-500/50 text-orange-500 text-[10px] py-2 rounded-lg font-bold uppercase">Sincronizza e Salva</button>
+                            <input type="text" id="cloudBin" placeholder="Bin ID" class="input-dark text-xs" value="${db.cloudBin || ''}">
+                            <input type="password" id="cloudKey" placeholder="API Key" class="input-dark text-xs" value="${db.cloudKey || ''}">
+                            <button onclick="syncCloud()" class="w-full bg-orange-500/10 border border-orange-500/50 text-orange-500 text-[10px] py-3 rounded-xl font-bold uppercase">
+                                <i class="bi bi-cloud-arrow-down-up mr-2"></i>Sincronizza Ora
+                            </button>
+                            <p class="text-[8px] text-center text-gray-600 uppercase">La sincronizzazione scarica i dati se il telefono è vuoto.</p>
                         </div>
                     </div>
 
@@ -245,79 +239,157 @@
             }
         }
 
+        // --- LOGICA CHART.JS ---
         function renderChart(dataPoints) {
             const ctx = document.getElementById('chart'); if(!ctx) return;
-            
-            const chartData = dataPoints.map(p => ({ 
-                x: p.date.getTime(), 
-                y: p.km,
-                eventType: p.type 
-            }));
-            
+            const chartData = dataPoints.map(p => ({ x: p.date.getTime(), y: p.km, eventType: p.type }));
             const minX = chartData[0].x; const maxX = chartData[chartData.length - 1].x;
-            
             let chartStatus = Chart.getChart("chart");
             if (chartStatus !== undefined) { chartStatus.destroy(); }
-
             new Chart(ctx, { 
                 type: 'line', 
                 data: { datasets: [{ data: chartData, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.05)', tension: 0.2, fill: true, pointRadius: 5, pointBackgroundColor: '#f97316', borderWidth: 2 }] }, 
                 options: { 
                     responsive: true, 
-                    plugins: { 
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: '#1e1e24',
-                            titleColor: '#f97316',
-                            titleFont: { weight: 'bold' },
-                            bodyColor: '#fff',
-                            borderColor: '#2a2a32',
-                            borderWidth: 1,
-                            displayColors: false,
-                            padding: 10,
-                            callbacks: {
-                                title: function(context) {
-                                    const d = new Date(context[0].parsed.x);
-                                    return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                },
-                                label: function(context) {
-                                    const point = context.raw;
-                                    return [
-                                        "Evento: " + point.eventType,
-                                        "Km: " + point.y.toLocaleString()
-                                    ];
-                                }
-                            }
-                        }
-                    }, 
+                    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e1e24', titleColor: '#f97316', displayColors: false, callbacks: {
+                        title: (c) => new Date(c[0].parsed.x).toLocaleDateString('it-IT'),
+                        label: (c) => ["Evento: " + c.raw.eventType, "Km: " + c.raw.y.toLocaleString()]
+                    }}}, 
                     scales: { 
-                        y: { 
-                            grid: { color: '#2a2a32', drawTicks: false }, 
-                            ticks: { 
-                                color: '#6b7280', 
-                                font: { size: 10 },
-                                callback: (value) => value >= 1000 ? (value / 1000) + 'k' : value
-                            } 
-                        }, 
-                        x: { 
-                            type: 'linear', 
-                            min: minX, 
-                            max: maxX, 
-                            grid: { display: false }, 
-                            ticks: { 
-                                color: '#9ca3af', 
-                                font: { size: 9 }, 
-                                maxTicksLimit: 5, 
-                                padding: 2, 
-                                callback: function(value) {
-                                    const date = new Date(value);
-                                    return date.toLocaleDateString('it-IT', { month: '2-digit', year: '2-digit' });
-                                } 
-                            } 
-                        } 
+                        y: { grid: { color: '#2a2a32' }, ticks: { color: '#6b7280', font: { size: 10 }, callback: (v) => v >= 1000 ? (v/1000)+'k' : v }}, 
+                        x: { type: 'linear', min: minX, max: maxX, grid: { display: false }, ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 5, callback: (v) => new Date(v).toLocaleDateString('it-IT', {month:'2-digit', year:'2-digit'}) }}
                     } 
                 } 
             });
+        }
+
+        // --- FUNZIONI CORE ---
+        function saveVehicle() {
+            const t = document.getElementById('vTipo').value, ma = document.getElementById('vMarca').value, mo = document.getElementById('vMod').value, ta = document.getElementById('vTargaInput').value, an = document.getElementById('vAnnoInput').value;
+            if(!ma || !mo) return alert("Inserisci Marca e Modello");
+            if (editingId) { 
+                Object.assign(db.vehicles.find(x => x.id === editingId), { tipo:t, marca:ma, modello:mo, targa:ta, anno:an }); 
+                editingId = null; 
+            } else { 
+                const id = Date.now(); 
+                db.vehicles.push({ id, tipo:t, marca:ma, modello:mo, targa:ta, anno:an, kmLogs: [], maint: [], deadlines: [] }); 
+                db.activeId = id; 
+            } 
+            save(); updateHeader(); switchTab('dashboard'); 
+        }
+
+        function editVehicle(id) { 
+            const v = db.vehicles.find(x => x.id === id); 
+            editingId = id; 
+            render('settings'); 
+            document.getElementById('formTitle').innerText = "Modifica Veicolo";
+            document.getElementById('vTipo').value = v.tipo; 
+            document.getElementById('vMarca').value = v.marca; 
+            document.getElementById('vMod').value = v.modello; 
+            document.getElementById('vTargaInput').value = v.targa; 
+            document.getElementById('vAnnoInput').value = v.anno; 
+            document.getElementById('btnSaveV').innerText = "Aggiorna Dati"; 
+            document.getElementById('btnCancelEdit').classList.remove('hidden'); 
+        }
+
+        function deleteVehicle(id) { if(confirm("Eliminare definitivamente questo mezzo e tutti i suoi dati?")) { db.vehicles = db.vehicles.filter(x => x.id !== id); if(db.activeId === id) db.activeId = db.vehicles.length ? db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
+        
+        function updateHeader() { 
+            const v = db.vehicles.find(x => x.id === db.activeId); 
+            if(v) { 
+                document.getElementById('vName').innerText = `${v.marca} ${v.modello}`; 
+                document.getElementById('vTarga').innerText = v.targa || '------'; 
+                document.getElementById('vAnno').innerText = v.anno || '----'; 
+                document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl'; 
+            } else {
+                document.getElementById('vName').innerText = "Nessun Mezzo";
+            }
+            document.getElementById('vMenu').innerHTML = db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join(''); 
+        }
+
+        function addKm() { 
+            const v = db.vehicles.find(x => x.id === db.activeId); 
+            const val = document.getElementById('kVal').value; 
+            if(!val || !v) return; 
+            v.kmLogs.push({ d: document.getElementById('kDate').value, v: parseInt(val), desc: document.getElementById('kDesc').value }); 
+            save(); switchTab('dashboard'); 
+        }
+
+        function addM() { 
+            const v = db.vehicles.find(x => x.id === db.activeId); 
+            const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; 
+            if(!k || !v) return; 
+            v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); 
+            save(); switchTab('dashboard'); 
+        }
+
+        function addDeadline() { 
+            const v = db.vehicles.find(x => x.id === db.activeId); 
+            const title = document.getElementById('deadTitle').value; 
+            if(!v || !title) return; 
+            if(!v.deadlines) v.deadlines = []; 
+            v.deadlines.push({ title, date: document.getElementById('deadDate').value, km: document.getElementById('deadKm').value ? parseInt(document.getElementById('deadKm').value) : null }); 
+            save(); render('dashboard'); 
+        }
+
+        function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
+        function delKm(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
+        function delM(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.maint.splice(i, 1); save(); render('maint'); }
+        function delDeadline(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.deadlines.splice(i, 1); save(); render('dashboard'); }
+        function showDeadlineForm() { document.getElementById('deadlineForm').classList.toggle('hidden'); }
+        function cancelEdit() { editingId = null; render('settings'); }
+
+        // --- SINCRONIZZAZIONE CLOUD INTELLIGENTE ---
+        async function syncCloud(silent = false) {
+            const key = document.getElementById('cloudKey')?.value || db.cloudKey;
+            const bin = document.getElementById('cloudBin')?.value || db.cloudBin;
+            
+            if(!key || !bin) {
+                if(!silent) alert("Inserisci Bin ID e API Key nelle impostazioni");
+                return;
+            }
+
+            // Salviamo le chiavi localmente
+            db.cloudKey = key; db.cloudBin = bin; save();
+
+            try {
+                // 1. PULL: Controlliamo cosa c'è sul cloud
+                const res = await fetch(`https://api.jsonbin.io/v3/b/${bin}/latest`, {
+                    headers: { 'X-Master-Key': key }
+                });
+
+                if(res.ok) {
+                    const cloudData = await res.json();
+                    const remoteDb = cloudData.record;
+
+                    // Se il locale è vuoto e il cloud ha dati, carichiamo dal cloud
+                    if (db.vehicles.length === 0 && remoteDb.vehicles && remoteDb.vehicles.length > 0) {
+                        if(silent || confirm("Dati trovati nel Cloud! Vuoi caricarli su questo dispositivo?")) {
+                            db = remoteDb;
+                            save();
+                            updateHeader();
+                            if(!silent) alert("Dati ripristinati dal Cloud!");
+                            switchTab('dashboard');
+                            return;
+                        }
+                    } 
+                }
+
+                // 2. PUSH: Se siamo arrivati qui, aggiorniamo il cloud con i dati locali
+                if(silent) return; // Non sovrascrivere in automatico all'avvio senza permesso
+
+                const updateRes = await fetch(`https://api.jsonbin.io/v3/b/${bin}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Master-Key': key },
+                    body: JSON.stringify(db)
+                });
+
+                if(updateRes.ok) alert("Cloud aggiornato con i dati del dispositivo!");
+                else alert("Errore durante l'invio dei dati.");
+
+            } catch(e) {
+                if(!silent) alert("Errore di connessione al Cloud.");
+            }
         }
 
         function exportData() {
@@ -339,34 +411,15 @@
             reader.readAsText(event.target.files[0]);
         }
 
-        function saveVehicle() { const t = document.getElementById('vTipo').value, ma = document.getElementById('vMarca').value, mo = document.getElementById('vMod').value, ta = document.getElementById('vTargaInput').value, an = document.getElementById('vAnnoInput').value; if(!ma || !mo) return; if (editingId) { Object.assign(db.vehicles.find(x => x.id === editingId), { tipo:t, marca:ma, modello:mo, targa:ta, anno:an }); editingId = null; } else { const id = Date.now(); db.vehicles.push({ id, tipo:t, marca:ma, modello:mo, targa:ta, anno:an, kmLogs: [], maint: [], deadlines: [] }); db.activeId = id; } save(); updateHeader(); render('settings'); }
-        function editVehicle(id) { const v = db.vehicles.find(x => x.id === id); editingId = id; render('settings'); document.getElementById('formTitle').innerText = "Modifica Veicolo"; document.getElementById('vTipo').value = v.tipo; document.getElementById('vMarca').value = v.marca; document.getElementById('vMod').value = v.modello; document.getElementById('vTargaInput').value = v.targa; document.getElementById('vAnnoInput').value = v.anno; document.getElementById('btnSaveV').innerText = "Aggiorna Dati"; document.getElementById('btnCancelEdit').classList.remove('hidden'); }
-        function deleteVehicle(id) { if(confirm("Eliminare?")) { db.vehicles = db.vehicles.filter(x => x.id !== id); if(db.activeId === id) db.activeId = db.vehicles.length ? db.vehicles[0].id : null; save(); updateHeader(); render('settings'); } }
-        function updateHeader() { const v = db.vehicles.find(x => x.id === db.activeId); if(v) { document.getElementById('vName').innerText = `${v.marca} ${v.modello}`; document.getElementById('vTarga').innerText = v.targa || '------'; document.getElementById('vAnno').innerText = v.anno || '----'; document.getElementById('headerIcon').className = v.tipo === 'moto' ? 'bi bi-bicycle text-orange-500 text-xl' : 'bi bi-car-front-fill text-orange-500 text-xl'; } document.getElementById('vMenu').innerHTML = db.vehicles.map(veh => `<div class="v-opt" onclick="selV(${veh.id})">${veh.tipo === 'moto' ? '🏍️' : '🚗'} ${veh.marca} ${veh.modello}</div>`).join(''); }
-        function addKm() { const v = db.vehicles.find(x => x.id === db.activeId); const val = document.getElementById('kVal').value; if(!val || !v) return; v.kmLogs.push({ d: document.getElementById('kDate').value, v: parseInt(val), desc: document.getElementById('kDesc').value }); save(); switchTab('dashboard'); }
-        function addM() { const v = db.vehicles.find(x => x.id === db.activeId); const t = document.getElementById('mType').value, d = document.getElementById('mDate').value, k = document.getElementById('mKm').value, desc = document.getElementById('mDesc').value; if(!k || !v) return; v.maint.unshift({ t, d: d.split('-').reverse().join('/'), d_raw: d, k: parseInt(k), desc }); save(); switchTab('dashboard'); }
-        function addDeadline() { const v = db.vehicles.find(x => x.id === db.activeId); const title = document.getElementById('deadTitle').value; if(!v || !title) return; if(!v.deadlines) v.deadlines = []; v.deadlines.push({ title, date: document.getElementById('deadDate').value, km: document.getElementById('deadKm').value ? parseInt(document.getElementById('deadKm').value) : null }); save(); render('dashboard'); }
-        function delKm(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.kmLogs.splice(i, 1); save(); render('km'); }
-        function delM(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.maint.splice(i, 1); save(); render('maint'); }
-        function delDeadline(i) { const v = db.vehicles.find(x => x.id === db.activeId); v.deadlines.splice(i, 1); save(); render('dashboard'); }
-        function showDeadlineForm() { document.getElementById('deadlineForm').classList.toggle('hidden'); }
-        function selV(id) { db.activeId = id; save(); updateHeader(); document.getElementById('vMenu').classList.remove('show'); switchTab('dashboard'); }
-        function cancelEdit() { editingId = null; render('settings'); }
-
-        async function syncCloud() {
-            const key = document.getElementById('cloudKey').value;
-            const bin = document.getElementById('cloudBin').value;
-            if(!key || !bin) return alert("Inserisci Key e Bin ID");
-            db.cloudKey = key; db.cloudBin = bin; save();
-            try {
-                const res = await fetch(`https://api.jsonbin.io/v3/b/${bin}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Master-Key': key }, body: JSON.stringify(db) });
-                if(res.ok) alert("Sincronizzazione riuscita!");
-                else alert("Errore: Verifica Key e Bin ID");
-            } catch(e) { alert("Errore di rete."); }
-        }
-
-        updateHeader();
-        switchTab('dashboard');
+        // --- AVVIO APP ---
+        window.onload = () => {
+            updateHeader();
+            switchTab('dashboard');
+            // Prova a sincronizzare silenziosamente se le chiavi esistono
+            if(db.cloudKey && db.cloudBin) {
+                syncCloud(true);
+            }
+        };
     </script>
 </body>
 </html>
